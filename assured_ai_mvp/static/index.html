@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7f8">
+  <title>Assured AI — Redaction Workbench</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Assured AI home">
+        <span class="brand-mark" aria-hidden="true">A</span><span>Assured AI</span>
+      </a>
+      <button class="new-scan" id="new-scan"><span aria-hidden="true">＋</span> New scan</button>
+      <nav class="side-nav" aria-label="Main navigation">
+        <a class="nav-item active" href="#workbench"><span>▤</span> Workbench</a>
+        <a class="nav-item" href="#protected-terms"><span>◇</span> Protected terms</a>
+      </nav>
+      <div class="side-section-label">RECENT SCANS</div>
+      <div class="history-list" id="history-list"><div class="history-empty">Your scans will appear here</div></div>
+      <div class="sidebar-bottom">
+        <div class="local-status"><span class="status-dot"></span><span><b>Local-only</b><small>Text stays on this device</small></span></div>
+        <div class="profile"><div class="avatar">AA</div><div><b>Assured workspace</b><small>Redaction engine</small></div></div>
+      </div>
+    </aside>
+
+    <main class="main" id="workbench">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Workspace</span><span class="crumb-slash">/</span><b>Redaction workbench</b></div>
+        <div class="top-actions"><span class="engine-badge"><span class="status-dot"></span> Algorithmic engine</span><button class="icon-button" title="Settings are managed locally" aria-label="Settings">⚙</button></div>
+      </header>
+
+      <section class="content">
+        <div class="intro">
+          <div class="eyebrow">PRIVATE BY DESIGN <span></span> DETERMINISTIC SCANNING</div>
+          <h1>What would you like to protect?</h1>
+          <p>Scan text for personal information, protected terms, and likely credentials. Review every match before using the redacted result.</p>
+        </div>
+
+        <section class="composer panel" aria-labelledby="input-title">
+          <div class="panel-heading"><div><div class="section-kicker">01 <span>INPUT</span></div><h2 id="input-title">Text to scan</h2></div><span class="private-label"><span class="lock">▣</span> Processed on this device</span></div>
+          <label class="sr-only" for="source-text">Paste or type text to scan</label>
+          <textarea id="source-text" maxlength="100000" placeholder="Paste a message, incident report, or document excerpt here…" spellcheck="false"></textarea>
+          <div class="composer-footer"><span id="char-count">0 / 100,000 characters</span><div class="composer-actions"><button class="llm-button" type="button" disabled title="Local model support is not available yet"><span aria-hidden="true">✦</span> Local LLM <small>Coming soon</small></button><button class="primary-button" id="run-scan"><span>⌕</span> Run scan</button></div></div>
+          <div class="form-error" id="scan-error" role="alert" hidden></div>
+        </section>
+
+        <div class="examples"><span>Try an example</span><button data-example="incident">Incident report</button><button data-example="credit">Credit review</button><button data-example="resume">Resume excerpt</button></div>
+
+        <section class="results-section" id="results-section" hidden aria-live="polite">
+          <div class="results-heading"><div><div class="section-kicker">02 <span>RESULTS</span></div><h2>Review your scan</h2></div><div class="scan-stats" id="scan-stats"></div></div>
+          <div class="review-alert" id="review-alert" hidden><span>!</span><div><b>Some matches need a closer look</b><p>These uncertain matches were redacted and marked for review, so the output remains protected.</p></div></div>
+          <div class="result-grid">
+            <article class="result-card"><div class="result-card-head"><div><span class="mini-icon input-icon">▤</span><b>Detected in your text</b></div><span class="legend"><i></i> Protected information</span></div><div class="highlighted-text" id="highlighted-text"></div></article>
+            <article class="result-card"><div class="result-card-head"><div><span class="mini-icon output-icon">◈</span><b>Redacted output</b></div><button class="copy-button" id="copy-output" title="Copy redacted output">Copy</button></div><pre class="redacted-output" id="redacted-output"></pre></article>
+          </div>
+
+          <section class="table-panel panel" aria-labelledby="table-title">
+            <div class="table-heading"><div><div class="section-kicker">SQLITE VAULT <span>·</span> MATCH MAPPINGS</div><h2 id="table-title">Redaction table</h2></div><label class="reveal-control"><input type="checkbox" id="reveal-values"><span>Reveal originals</span></label></div>
+            <div class="table-scroll"><table><thead><tr><th>PLACEHOLDER</th><th>ORIGINAL VALUE</th><th>ENTITY TYPE</th><th>METHOD</th><th>SENSITIVITY</th></tr></thead><tbody id="mapping-rows"></tbody></table><div class="table-empty" id="table-empty" hidden>No sensitive information was detected in this scan.</div></div>
+            <div class="table-foot"><span><span class="db-dot"></span> Saved in local SQLite</span><span id="scan-time"></span></div>
+          </section>
+        </section>
+
+        <section class="terms-section panel" id="protected-terms">
+          <div class="terms-head"><div><div class="section-kicker">DETECTION CONFIGURATION</div><h2>Protected terms</h2><p>Names and phrases here are checked for exact matches, typos, and phonetic similarities.</p></div><span class="term-count" id="term-count">0 terms</span></div>
+          <form id="term-form" class="term-form">
+            <label><span>Term or phrase</span><input id="term-value" name="value" maxlength="120" placeholder="e.g. Contoso Holdings" required></label>
+            <label><span>Entity type</span><input id="term-type" name="entity_type" maxlength="40" value="CUSTOM_TERM" required></label>
+            <label><span>Sensitivity</span><select id="term-sensitivity" name="sensitivity"><option>PII</option><option selected>CONFIDENTIAL</option><option>CRITICAL_SECRET</option></select></label>
+            <button class="add-term-button" type="submit">＋ Add term</button>
+          </form>
+          <div class="terms-list" id="terms-list"></div>
+          <div class="terms-foot"><span class="status-dot"></span> <span>Changes are saved locally and apply to the next scan.</span></div>
+        </section>
+        <footer class="page-footer"><span>Assured AI Redaction Workbench</span><span>Algorithmic scanning · No model inference</span></footer>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
