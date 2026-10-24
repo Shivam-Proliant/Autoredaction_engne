@@ -43,7 +43,7 @@ flowchart TD
     end
 
     TokenVault --> Router{"Policy-Driven Hybrid Router"}
-    Router -->|"CRITICAL_SECRET"| LocalEnclave["Local Memory-Safe Rust Enclave (:8080)<br/>or Local Quantized GGUF / Ollama"]
+    Router -->|"CRITICAL_SECRET"| LocalEnclave["Local Quantized GGUF / Ollama"]
     Router -->|"CLOUD_API_SAFE"| CloudLLM["External Cloud LLM (OpenAI / Claude)<br/>Zero Raw Secrets Exposed"]
 
     LocalEnclave --> AIResponse["AI Reply with {{PLACEHOLDERS}} Intact"]
@@ -67,7 +67,7 @@ flowchart TD
 | **Phonetic Matching** | **American Soundex** | Indexes names by phonetic sound in English, catching homophonic typos (`Sinoptix` vs `Synoptix`). |
 | **Secret Detection** | **Shannon Information Entropy** | Calculates per-character bit entropy to detect unstructured passwords, bearer tokens, and API keys without dictionary matches. |
 | **Local SLM Engine** | **Local Small LLM (SLM)** | Offline semantic entity extraction using locally installed models (Ollama, LM Studio, HuggingFace Hub, or GGUF weights) with zero network egress. |
-| **Local Enclave** | **Rust Native Inference Server** | High-performance, memory-safe inference server on `localhost:8080` with zeroized RAM telemetry. |
+| **Local Enclave** | High-performance, memory-safe inference server on `localhost:8080` with zeroized RAM telemetry. |
 | **Dashboard** | **Streamlit & Pandas** | Interactive user interface featuring live scenario execution, quantitative judge benchmarks, and one-click compliance CSV export. |
 
 ---
@@ -129,7 +129,7 @@ Applies the 3-Tier Algorithmic Engine first (guaranteeing deterministic zero-lea
 * **Problem**: Autonomous AI agents calling external APIs or terminal tools can inadvertently transmit internal credentials, classified project names (`TridentNaval`), or private cluster IPs to external LLM providers.
 * **How It Works**:
   - The SQLite Vault acts as an inline proxy interceptor.
-  - Prompts with `CRITICAL_SECRET` sensitivity are automatically diverted to a local memory-safe Rust enclave (zero external egress).
+  - Prompts with `CRITICAL_SECRET` sensitivity are automatically diverted to a local enclave (zero external egress).
   - Sanitized tool-call arguments protect sensitive parameters throughout multi-step execution.
 
 ---
@@ -167,7 +167,7 @@ Every redaction, routing choice, and detokenisation event is recorded in the SQL
 - Original vs Redacted Length
 - Redaction Count & Grey Zone Typo Count
 - Maximum Sensitivity Tier (`PII`, `CONFIDENTIAL`, `CRITICAL_SECRET`)
-- Recommended Route Policy (`CLOUD_API_SAFE` or `LOCAL_RUST_ENCLAVE`)
+- Recommended Route Policy (`CLOUD_API_SAFE`)
 - Processing Overhead (ms)
 
 Users can export full compliance logs with a single click as CSV (`assurance_audit_log_full.csv`) to satisfy audit requirements for **EU AI Act Track 5**, **GDPR Article 25**, and **SOC 2 Type II**.
