@@ -119,7 +119,7 @@ PATTERNS = [
     ("UK_POSTCODE", "PII", "POSTCODE", "address", re.compile(r"\b(?:GIR\s?0AA|(?:[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}))\b", re.I)),
     ("US_SSN", "PII", "SSN", "identity", re.compile(r"(?<!\d)(?!000|666|9\d\d)\d{3}[- ](?!00)\d{2}[- ](?!0000)\d{4}(?!\d)")),
     ("PAYMENT_CARD", "CRITICAL_SECRET", "CARD_NUMBER", "payment_card", re.compile(r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")),
-    ("BANK_ACCOUNT", "CONFIDENTIAL", "ACCOUNT_NUMBER", "bank_account", re.compile(r"\b(?:bank\s+)?(?:account|acct)(?:\s+(?:number|no\.?))?\s*(?:is|[:=#])\s*([A-Z0-9][A-Z0-9-]{5,33})(?![A-Z0-9-])", re.I)),
+    ("ACCOUNT_NUMBER", "CONFIDENTIAL", "ACCOUNT_NUMBER", "bank_account", re.compile(r"\b(?:bank\s+)?(?:account|acct)(?:\s+(?:number|no\.?))?\s*(?:(?:is|[:=#])\s*)?((?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{5,33})(?![A-Z0-9-])", re.I)),
     ("SORT_CODE", "CONFIDENTIAL", "SORT_CODE", "bank_account", re.compile(r"(?<!\d)\d{2}-\d{2}-\d{2}(?!\d)")),
     ("FINANCIAL_AMOUNT", "CONFIDENTIAL", "CURRENCY_AMOUNT", "amount", re.compile(r"(?<!\w)(?:£|\$|€|¥)\s?\d[\d,]*(?:\.\d{1,2})?(?!\w)")),
 ]
@@ -131,8 +131,8 @@ NAME_CONTEXT_PATTERNS = [
 ]
 KEY_ASSIGNMENT = re.compile(r"\b(?:api(?:[_ -]?key)?|access[_ -]?token|client[_ -]?secret|(?:aws[_ -]?)?secret[_ -]?access[_ -]?key|password|passwd|secret|private[_ -]?key)\b\s*[:=]\s*['\"]?([A-Za-z0-9_~+/-][A-Za-z0-9._~+/-]{6,}[A-Za-z0-9_~+/-]|[A-Za-z0-9_~+/-]{8,})", re.I)
 ADDRESS_PATTERN = re.compile(r"\b\d{1,5}\s+[\w.'’#-]+(?:\s+[\w.'’#-]+){0,3}\s+(?:Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Close|Crescent|Way|Terrace|Place|Gardens?)\b(?:,\s*[A-Za-z][\w.'’-]*(?:\s+[A-Za-z][\w.'’-]*){0,2})?(?:,\s*(?:GIR\s?0AA|[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}))?", re.I)
-ACCOUNT_CONTEXT = re.compile(r"\b(?:bank\s+)?(?:account|acct)(?:\s+(?:number|no\.?))?\s*(?:is|[:=#])\s*(?P<value>[A-Z0-9][A-Z0-9-]{5,33})(?![A-Z0-9-])", re.I)
-CARD_FRAGMENT = re.compile(r"\b(?:debit|credit|payment)\s+card\s+(?:ending(?:\s+in)?|last\s+(?:four|4)|number)\s*(?:is\s*)?(?P<value>\d{4,19}(?:[ -]\d{3,4}){0,3})\b", re.I)
+ACCOUNT_CONTEXT = re.compile(r"\b(?:bank\s+)?(?:account|acct)(?:\s+(?:number|no\.?))?\s*(?:(?:is|[:=#])\s*)?(?P<value>(?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{5,33})(?![A-Z0-9-])", re.I)
+CARD_FRAGMENT = re.compile(r"\b(?:(?P<card_kind>debit|credit|payment)\s+)?card\s+(?:(?:ends?|ending)\s+(?:in\s*)?|last\s+(?:four|4)|number(?:\s+is)?)\s*(?:is\s*)?(?P<value>\d{4,19}(?:[ -]\d{3,4}){0,3})\b", re.I)
 PASSWORD_CONTEXT = re.compile(r"\b(?:password|passcode|passphrase)\s*(?:is|[:=])\s*['\"]?(?P<value>[^\s,;.'\"]{6,})", re.I)
 SERVICE_CONTEXT = re.compile(r"\b(?:service\s+name|service|application|system)\s+(?:called|named|is|[:=])\s+(?P<value>[A-Z][A-Za-z0-9_-]*(?:\s+[A-Z][A-Za-z0-9_-]*){0,3})\b", re.I)
 ETHNICITY_CONTEXT = re.compile(r"\b(?:ethnicity|ethnic\s+background|race)\s*(?:is|[:=])\s*(?P<value>Asian|Black|White|Mixed|Indian|Pakistani|Bangladeshi|Chinese|African|Caribbean|Arab|Latino|Latina|Latinx|Hispanic|Indigenous|Native\s+American|Pacific\s+Islander)\b", re.I)
@@ -169,15 +169,20 @@ class RedactionEngine:
                     continue
                 if entity == "UK_NI_NUMBER" and value.replace(" ", "").upper()[:2] in {"BG", "GB", "NK", "KN", "TN", "NT", "ZZ"}:
                     continue
-                if entity == "BANK_ACCOUNT":
+                if entity in {"BANK_ACCOUNT", "ACCOUNT_NUMBER"}:
                     start, end = match.span(1)
                 else:
                     start, end = match.span()
                 candidates.append(self._candidate(start, end, entity, sensitivity, method, 1.0, False, detector))
 
         self._add_pattern_candidates(candidates, text, ADDRESS_PATTERN, "ADDRESS", "PII", "ADDRESS_CONTEXT", "address", enabled)
-        self._add_pattern_candidates(candidates, text, ACCOUNT_CONTEXT, "BANK_ACCOUNT", "CONFIDENTIAL", "ACCOUNT_CONTEXT", "bank_account", enabled, group="value")
-        self._add_pattern_candidates(candidates, text, CARD_FRAGMENT, "PAYMENT_CARD", "CRITICAL_SECRET", "CARD_FRAGMENT", "payment_card", enabled, group="value")
+        self._add_pattern_candidates(candidates, text, ACCOUNT_CONTEXT, "ACCOUNT_NUMBER", "CONFIDENTIAL", "ACCOUNT_CONTEXT", "bank_account", enabled, group="value")
+        if enabled.get("payment_card", True):
+            for match in CARD_FRAGMENT.finditer(text):
+                kind = (match.group("card_kind") or "").upper()
+                entity = f"{kind}_CARD" if kind in {"DEBIT", "CREDIT"} else "PAYMENT_CARD"
+                start, end = match.span("value")
+                candidates.append(self._candidate(start, end, entity, "CRITICAL_SECRET", "CARD_FRAGMENT", 0.99, False, "payment_card"))
         self._add_pattern_candidates(candidates, text, PASSWORD_CONTEXT, "PASSWORD", "CRITICAL_SECRET", "PASSWORD_CONTEXT", "password", enabled, group="value")
         self._add_pattern_candidates(candidates, text, SERVICE_CONTEXT, "SERVICE_NAME", "CONFIDENTIAL", "SERVICE_CONTEXT", "service_name", enabled, group="value")
         self._add_pattern_candidates(candidates, text, ETHNICITY_CONTEXT, "ETHNICITY", "PII", "ETHNICITY_CONTEXT", "ethnicity", enabled, group="value")

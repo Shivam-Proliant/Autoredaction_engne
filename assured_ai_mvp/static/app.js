@@ -50,7 +50,6 @@ function renderScan(scan, originalText, historical = false) {
   $("#scan-time").textContent = new Date(`${scan.created_at.replace(" ", "T")}Z`).toLocaleString();
   $("#reveal-values").checked = false;
   renderMappings(scan.mappings || []);
-  loadHistory();
   $("#results-section").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -102,25 +101,6 @@ function updateToggleAllLabel() {
 
 async function loadDetectors() {
   const { detectors } = await api("/api/detectors"); state.detectors = detectors; renderDetectors();
-}
-
-async function loadHistory() {
-  try {
-    const { scans } = await api("/api/scans");
-    const list = $("#history-list"); list.replaceChildren();
-    if (!scans.length) { list.innerHTML = '<div class="history-empty">Your scans will appear here</div>'; return; }
-    for (const scan of scans) {
-      const button = document.createElement("button"); button.className = "history-button";
-      button.textContent = `${scan.match_count} redactions · ${new Date(`${scan.created_at.replace(" ", "T")}Z`).toLocaleDateString()}`;
-      button.title = `${scan.id} · ${scan.redacted_text.slice(0, 90)}`;
-      button.addEventListener("click", async () => {
-        const result = await api(`/api/scans/${encodeURIComponent(scan.id)}`);
-        renderScan(result.scan, null, true); // Original text is intentionally not persisted.
-        showToast("Loaded saved scan. Original text is not stored.");
-      });
-      list.append(button);
-    }
-  } catch (error) { showToast(error.message); }
 }
 
 async function loadTerms() {
@@ -190,4 +170,4 @@ $("#term-form").addEventListener("submit", async event => {
   } catch (error) { showToast(error.message); }
 });
 
-Promise.all([loadTerms(), loadHistory(), loadDetectors()]).catch(error => showToast(error.message));
+Promise.all([loadTerms(), loadDetectors()]).catch(error => showToast(error.message));
