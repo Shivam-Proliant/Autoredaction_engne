@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
 import re
 import sqlite3
+import sys
 import uuid
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -14,8 +17,13 @@ from urllib.parse import urlparse
 from engine import DEFAULT_DETECTORS, DETECTOR_LABELS, GENERIC_LABELS, RedactionEngine
 
 
-ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / "assured_ai_mvp.sqlite3"
+ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+if getattr(sys, "frozen", False):
+    DATA_ROOT = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "AssuredAI" / "RedactionWorkbench"
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+else:
+    DATA_ROOT = ROOT
+DB_PATH = DATA_ROOT / "assured_ai_mvp.sqlite3"
 STATIC = ROOT / "static"
 
 
@@ -173,6 +181,40 @@ class Handler(BaseHTTPRequestHandler):
                 rows = conn.execute("SELECT id FROM scans ORDER BY created_at DESC, rowid DESC LIMIT 50").fetchall()
                 scans = [fetch_scan(conn, row["id"]) for row in rows]
             return self._json(200, {"scans": scans})
+        if route == "/api/compliance-report":
+            with connect_db() as conn:
+                rows = conn.execute("SELECT id FROM scans ORDER BY created_at, rowid").fetchall()
+                scans = []
+                for row in rows:
+                    saved = fetch_scan(conn, row["id"])
+                    scans.append({
+                        "id": saved["id"],
+                        "created_at": saved["created_at"],
+                        "original_length": saved["original_length"],
+                        "redacted_text": saved["redacted_text"],
+                        "match_count": saved["match_count"],
+                        "review_count": saved["review_count"],
+                        "processing_ms": saved["processing_ms"],
+                        "mappings": [{key: mapping[key] for key in (
+                            "placeholder", "entity_type", "match_method", "similarity",
+                            "sensitivity", "detector_key", "review_required", "span_start", "span_end",
+                        )} for mapping in saved["mappings"]],
+                    })
+            report = {
+                "report_title": "Assured AI Redaction Compliance Report",
+                "schema_version": 1,
+                "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "storage": "Local SQLite",
+                "processing": {"engine": "deterministic algorithmic scanning", "model_inference_used": False},
+                "privacy": {"original_input_stored": False, "matched_original_values_included": False},
+                "summary": {
+                    "scan_count": len(scans),
+                    "redaction_count": sum(scan["match_count"] for scan in scans),
+                    "review_count": sum(scan["review_count"] for scan in scans),
+                },
+                "scans": scans,
+            }
+            return self._json(200, {"report": report})
         if route.startswith("/api/scans/"):
             parts = route.strip("/").split("/")
             if len(parts) not in (3, 4):
@@ -314,10 +356,14 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(200, {"detectors": updates})
 
 
+def create_server(port: int = 8765) -> ThreadingHTTPServer:
+    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+
+
 def main() -> None:
     connect_db().close()
-    server = ThreadingHTTPServer(("127.0.0.1", 8765), Handler)
-    print("Assured AI Redaction Workbench is running at http://127.0.0.1:8765")
+    server = create_server()
+    print(f"Assured AI Redaction Workbench is running at http://127.0.0.1:{server.server_port}")
     print(f"SQLite database: {DB_PATH}")
     try:
         server.serve_forever()

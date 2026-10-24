@@ -149,6 +149,22 @@ $("#copy-output").addEventListener("click", async () => {
   catch { showToast("Clipboard access is unavailable in this browser"); }
 });
 
+$("#export-report").addEventListener("click", async event => {
+  const button = event.currentTarget; button.disabled = true;
+  try {
+    const { report } = await api("/api/compliance-report");
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    const date = report.generated_at_utc.slice(0, 10);
+    link.href = URL.createObjectURL(blob);
+    link.download = `assured-ai-compliance-report-${date}.json`;
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    showToast(`Compliance report downloaded · ${report.summary.scan_count} saved scans`);
+  } catch (error) { showToast(error.message); }
+  finally { button.disabled = false; }
+});
+
 $("#toggle-all").addEventListener("click", async () => {
   const turnOn = state.detectors.some(item => !item.enabled);
   const updates = Object.fromEntries(state.detectors.map(item => [item.key, turnOn]));

@@ -106,6 +106,12 @@ Open <http://127.0.0.1:8765>. Keep both processes running in their terminals. St
 
 For development, edit `engine.py` for scanning behavior, `app.py` for the API and persistence, and the files in `static/` for the UI. Restart the Python process after changing backend files; refresh the browser after frontend changes. The original Streamlit prototype is maintained separately and is not a dependency of this MVP.
 
+### Build a Windows desktop app
+
+The desktop shell wraps the same local API and UI in a native WebView2 window. It chooses an available loopback port at launch, runs the API in the background, and shuts it down when the desktop window closes. In a packaged build, the SQLite vault is stored under `%LOCALAPPDATA%\AssuredAI\RedactionWorkbench`; the source server continues to store it beside `app.py`.
+
+Run `.\build_windows.ps1` from this directory. It creates an isolated `.desktop-build-venv`, installs the dependencies in `desktop_requirements.txt`, and creates `dist\AssuredAI-RedactionWorkbench-1.1.0.exe`. Building requires Python 3.10+ and internet access. The resulting executable needs the Microsoft Edge WebView2 Runtime but does not require Python on the user's computer.
+
 ## 7. Local API
 
 All API routes are served from the same origin as the UI:
@@ -122,6 +128,7 @@ All API routes are served from the same origin as the UI:
 | GET | `/api/scans` | Read the latest 50 saved scans and mappings, with originals masked |
 | GET | `/api/scans/{id}` | Read a saved scan with originals masked |
 | GET | `/api/scans/{id}/reveal` | Return mapping originals for the explicit reveal workflow |
+| GET | `/api/compliance-report` | Export saved redacted results and audit metadata without matched originals |
 
 The scan endpoint accepts up to 100,000 characters. Custom placeholder values are limited to 120 characters. Invalid or empty input returns a JSON error with an appropriate HTTP status.
 

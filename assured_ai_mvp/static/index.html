@@ -37,6 +37,20 @@
           <div class="detector-grid" id="detector-grid" aria-live="polite"></div>
         </section>
 
+        <section class="tiers-panel panel" aria-labelledby="tiers-title">
+          <div class="detector-head"><div><div class="section-kicker">PROCESSING TIERS</div><h2 id="tiers-title">Choose an engine tier</h2><p>Only Tier 1 is available and runs real scans. Other tiers are placeholders and cannot process text.</p></div></div>
+          <div class="tier-grid">
+            <div class="tier-card tier-active" aria-current="true"><span class="tier-label">TIER 1 · AVAILABLE</span><b>Algorithmic</b><small>Deterministic local detectors</small></div>
+            <button class="tier-card" type="button" disabled aria-label="Tier 2 Local LLM or classifier, coming soon"><span class="tier-label">TIER 2 · COMING SOON</span><b>Local LLM or classifier</b><small>Unavailable · no inference runs</small></button>
+            <button class="tier-card" type="button" disabled aria-label="Tier 3 Hybrid, coming soon"><span class="tier-label">TIER 3 · COMING SOON</span><b>Hybrid</b><small>Unavailable · no inference runs</small></button>
+          </div>
+        </section>
+
+        <section class="compliance-panel panel" aria-labelledby="compliance-title">
+          <div><div class="section-kicker">LOCAL AUDIT EXPORT</div><h2 id="compliance-title">Compliance report</h2><p>Download recorded redacted scans with detector, method, sensitivity, review, and timing details. Original text and matched values are excluded.</p></div>
+          <button class="add-term-button" id="export-report" type="button">↓ Download report</button>
+        </section>
+
         <section class="results-section" id="results-section" hidden aria-live="polite">
           <div class="results-heading"><div><div class="section-kicker">02 <span>RESULTS</span></div><h2>Review your scan</h2></div><div class="scan-stats" id="scan-stats"></div></div>
           <div class="review-alert" id="review-alert" hidden><span>!</span><div><b>Some matches need a closer look</b><p>These uncertain matches were redacted and marked for review, so the output remains protected.</p></div></div>

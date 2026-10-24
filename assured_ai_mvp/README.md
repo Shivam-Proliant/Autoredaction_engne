@@ -15,6 +15,17 @@ python app.py
 
 Open <http://127.0.0.1:8765>. Stop the server with Ctrl+C. The SQLite database is created at `assured_ai_mvp.sqlite3` in this folder.
 
+## Windows desktop application
+
+To build a single-window desktop app, open PowerShell in this folder and run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\build_windows.ps1
+```
+
+The executable is written to `dist\AssuredAI-RedactionWorkbench-1.1.0.exe`. It runs the same local algorithmic engine in a native window and saves its SQLite vault under `%LOCALAPPDATA%\AssuredAI\RedactionWorkbench`. Users can run the executable without installing Python. Building requires Python 3.10+ and network access to install the packaging tools. The Microsoft Edge WebView2 Runtime must be present (current Microsoft Edge installations include it).
+
 ## What it detects
 
 - Email addresses; valid IPv4/IPv6 addresses; UK postcodes and National Insurance numbers; US SSNs; UK/North American mobile numbers; UK sort codes; and Luhn-checked payment card numbers.
@@ -32,5 +43,6 @@ The Local LLM button is intentionally disabled. Scanning is algorithmic and runs
 - `GET /api/terms`, `POST /api/terms`, `DELETE /api/terms/{id}`
 - `POST /api/scan` with JSON `{ "text": "..." }`
 - `GET /api/scans`, `GET /api/scans/{id}`, `GET /api/scans/{id}/reveal`
+- `GET /api/compliance-report` — recorded redacted scans and audit metadata, without matched originals
 
 The server binds to `127.0.0.1` only. Scan requests and input text are not written to application logs.
