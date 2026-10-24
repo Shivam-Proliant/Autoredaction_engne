@@ -28,18 +28,13 @@ class DesktopApi:
         suggested_name = Path(suggested_name).name
         if not suggested_name.lower().endswith(".csv"):
             suggested_name += ".csv"
-        import webview
-
-        selected = self.window.create_file_dialog(
-            webview.FileDialog.SAVE,
-            save_filename=suggested_name,
-            file_types=("CSV files (*.csv)",),
-        )
-        if not selected:
-            return {"saved": False, "cancelled": True}
-        destination = Path(selected[0])
-        if destination.suffix.lower() != ".csv":
-            destination = destination.with_suffix(".csv")
+        downloads = Path.home() / "Downloads"
+        downloads.mkdir(parents=True, exist_ok=True)
+        destination = downloads / suggested_name
+        suffix = 2
+        while destination.exists():
+            destination = downloads / f"{Path(suggested_name).stem}-{suffix}.csv"
+            suffix += 1
         destination.write_text(csv_text, encoding="utf-8-sig", newline="")
         return {"saved": True, "path": str(destination)}
 

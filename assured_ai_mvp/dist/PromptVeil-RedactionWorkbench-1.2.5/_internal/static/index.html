@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eff3e9">
+  <meta name="description" content="A local, algorithmic redaction workbench.">
+  <title>PromptVeil — Redaction Workbench</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <main class="main" id="workbench">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="PromptVeil home"><span class="brand-mark" aria-hidden="true">P</span><span>PromptVeil</span></a>
+        <div class="top-actions"><span class="engine-badge"><span class="status-dot"></span> Local algorithmic engine</span><button class="new-scan" id="new-scan" type="button"><span aria-hidden="true">＋</span> New scan</button></div>
+      </header>
+
+      <section class="content">
+        <div class="intro">
+          <h1>What would you like to protect?</h1>
+        </div>
+
+        <section class="composer panel" aria-labelledby="input-title">
+          <div class="panel-heading"><div><h2 id="input-title">Text to scan</h2></div><span class="private-label"><span class="lock">▣</span> Processed on this device</span></div>
+          <label class="sr-only" for="source-text">Paste or type text to scan</label>
+          <textarea id="source-text" maxlength="100000" placeholder="Paste a message, incident report, or document excerpt here…" spellcheck="false"></textarea>
+          <div class="composer-footer"><span id="char-count">0 / 100,000 characters</span><div class="composer-actions"><button class="primary-button" id="run-scan"><span>⌕</span> Run scan</button></div></div>
+          <div class="form-error" id="scan-error" role="alert" hidden></div>
+        </section>
+
+        <div class="examples"><span>Try an example</span><button data-example="incident">Incident report</button><button data-example="credit">Credit review</button><button data-example="resume">Resume excerpt</button></div>
+
+        <section class="detector-panel panel" aria-labelledby="detector-title">
+          <div class="detector-head"><div><div class="section-kicker">ALGORITHM CONTROLS</div><h2 id="detector-title">Detectors</h2><p>Choose which algorithms run on the next scan. Settings are saved in local SQLite.</p></div><button class="toggle-all-button" id="toggle-all" type="button">Turn all off</button></div>
+          <div class="detector-grid" id="detector-grid" aria-live="polite"></div>
+        </section>
+
+        <section class="tiers-panel panel" aria-labelledby="tiers-title">
+          <div class="detector-head"><div><div class="section-kicker">PROCESSING TIERS</div><h2 id="tiers-title">Choose an engine tier</h2><p id="tier-description">Tier 1 runs here. Local Qwen inference is enabled only in the desktop app and stays on this laptop.</p></div></div>
+          <div class="tier-grid">
+            <button class="tier-card tier-active" id="tier-algorithmic" data-tier="algorithmic" type="button" aria-pressed="true"><span class="tier-label">TIER 1 · AVAILABLE</span><b>Algorithmic</b><small>Deterministic local detectors</small></button>
+            <button class="tier-card" id="tier-local-llm" data-tier="local_llm" type="button" disabled aria-pressed="false"><span class="tier-label">TIER 2 · DESKTOP ONLY</span><b>Qwen local classifier</b><small>Searching local Qwen model…</small></button>
+            <button class="tier-card" id="tier-hybrid" data-tier="hybrid" type="button" disabled aria-pressed="false"><span class="tier-label">TIER 3 · DESKTOP ONLY</span><b>Hybrid</b><small>Rules plus local Qwen</small></button>
+          </div>
+        </section>
+
+        <section class="compliance-panel panel" aria-labelledby="compliance-title">
+          <div><div class="section-kicker">GDPR PROCESSING EVIDENCE</div><h2 id="compliance-title">GDPR report</h2><p>Save a CSV audit report with scan counts, detector methods, review flags, and local data-handling notes. It excludes original text and matched values.</p></div>
+          <button class="add-term-button" id="export-report" type="button">↓ Save GDPR CSV</button>
+        </section>
+
+        <section class="results-section" id="results-section" hidden aria-live="polite">
+          <div class="results-heading"><div><div class="section-kicker">02 <span>RESULTS</span></div><h2>Review your scan</h2></div><div class="scan-stats" id="scan-stats"></div></div>
+          <div class="review-alert" id="review-alert" hidden><span>!</span><div><b>Some matches need a closer look</b><p>These uncertain matches were redacted and marked for review, so the output remains protected.</p></div></div>
+          <div class="result-grid">
+            <article class="result-card"><div class="result-card-head"><div><span class="mini-icon input-icon">▤</span><b>Detected in your text</b></div><span class="legend"><i></i> Protected information</span></div><div class="highlighted-text" id="highlighted-text"></div></article>
+            <article class="result-card"><div class="result-card-head"><div><span class="mini-icon output-icon">◈</span><b>Redacted output</b></div><button class="copy-button" id="copy-output" title="Copy redacted output">Copy</button></div><pre class="redacted-output" id="redacted-output"></pre></article>
+          </div>
+
+          <section class="table-panel panel" aria-labelledby="table-title">
+            <div class="table-heading"><div><div class="section-kicker">SQLITE VAULT <span>·</span> MATCH MAPPINGS</div><h2 id="table-title">Redaction table</h2></div><label class="reveal-control"><input type="checkbox" id="reveal-values"><span>Reveal originals</span></label></div>
+            <div class="table-scroll"><table><thead><tr><th>PLACEHOLDER</th><th>ORIGINAL VALUE</th><th>ENTITY TYPE</th><th>METHOD</th><th>SENSITIVITY</th></tr></thead><tbody id="mapping-rows"></tbody></table><div class="table-empty" id="table-empty" hidden>No sensitive information was detected in this scan.</div></div>
+            <div class="table-foot"><span><span class="db-dot"></span> Saved in local SQLite</span><span id="scan-time"></span></div>
+          </section>
+        </section>
+
+        <section class="terms-section panel" id="protected-terms">
+          <div class="terms-head"><div><div class="section-kicker">CUSTOM PLACEHOLDERS</div><h2>Add a placeholder rule</h2><p>Enter the actual sensitive value or phrase. The selected type becomes its placeholder, for example <code>{{PERSON_NAME_01}}</code>.</p></div><span class="term-count" id="term-count">0 rules</span></div>
+          <form id="term-form" class="term-form">
+            <label><span>Sensitive value or phrase</span><input id="term-value" name="value" maxlength="120" placeholder="e.g. Contoso Holdings" required></label>
+            <label><span>Placeholder type</span><input id="term-type" name="entity_type" list="placeholder-types" maxlength="40" value="PERSON_NAME" required><datalist id="placeholder-types"><option value="PERSON_NAME"><option value="ADDRESS"><option value="API_KEY"><option value="BANK_ACCOUNT"><option value="ACCOUNT_NUMBER"><option value="PAYMENT_CARD"><option value="DEBIT_CARD"><option value="CREDIT_CARD"><option value="PASSWORD"><option value="SERVICE_NAME"><option value="ETHNICITY"><option value="REGION"><option value="CUSTOM_TERM"></datalist></label>
+            <label><span>Sensitivity</span><select id="term-sensitivity" name="sensitivity"><option>PII</option><option selected>CONFIDENTIAL</option><option>CRITICAL_SECRET</option></select></label>
+            <button class="add-term-button" type="submit">＋ Add placeholder</button>
+          </form>
+          <div class="terms-list" id="terms-list"></div>
+          <div class="terms-foot"><span class="status-dot"></span> <span>Rules are saved locally and apply to the next scan. Generic labels such as “Name” are not values; use a real name or phrase.</span></div>
+        </section>
+        <footer class="page-footer"><span>PromptVeil Redaction Workbench</span><span id="processing-mode">Local processing · Tier 1 algorithmic</span></footer>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
