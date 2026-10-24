@@ -17,11 +17,12 @@ Open <http://127.0.0.1:8765>. Stop the server with Ctrl+C. The SQLite database i
 
 ## What it detects
 
-- Email addresses, IPv4 addresses, UK National Insurance numbers, and UK mobile numbers.
-- Common API key and bearer token formats, plus high-entropy credential-like strings.
-- Exact protected terms, Damerau–Levenshtein spelling matches, and Soundex phonetic matches. Borderline matches are still redacted and marked for review.
+- Email addresses; valid IPv4/IPv6 addresses; UK postcodes and National Insurance numbers; US SSNs; UK/North American mobile numbers; UK sort codes; and Luhn-checked payment card numbers.
+- Common API-key formats, bearer tokens, and custom credentials after labels such as `api_key=` or `password:`; plus high-entropy credential-like strings.
+- Person names after common context cues, as well as exact protected terms, Damerau–Levenshtein spelling matches, and Soundex phonetic matches. Borderline matches are still redacted and marked for review.
+- Street addresses, account-number values after account cues, debit/credit card fragments, currency amounts, service names, ethnicity labels, and common UK region/city names.
 
-Protected terms can be added or removed in the UI and persist across restarts. Scan results store the redacted text and token mappings in SQLite. Original matched values are masked in the UI until **Reveal originals** is enabled. The original full input is not stored.
+Detectors can be switched individually or all together, and settings persist across restarts. Custom placeholder rules can be added or removed in the UI: enter the actual protected value and select its placeholder type. Scan results store the redacted text and token mappings in SQLite. Original matched values are masked in the UI until **Reveal originals** is enabled. The original full input is not stored.
 
 The Local LLM button is intentionally disabled. Scanning is algorithmic and runs only when **Run scan** is selected.
 

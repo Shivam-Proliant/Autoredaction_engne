@@ -1,7 +1,7 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { scan: null, terms: [], toastTimer: null };
+const state = { scan: null, terms: [], detectors: [], toastTimer: null };
 const examples = {
-  incident: "Urgent: investigate the deadlock for Callum Cockburn at Synoptix. Contact him at callum.cockburn@example.com. The service key is sk-proj-89fH2kL9pQ3mN7vX1zR4 and the host is 192.168.1.200.",
+  incident: "Hi, I was double-charged on my electricity bill. My account is under the name Marcus Albright. Email: marcus.albright@example.com. Mobile: +44 7700 900123. API key: sk-proj-89fH2kL9pQ3mN7vX1zR4. Server IP: 192.168.1.200.",
   credit: "Review the mortgage application for Priya Patel (single mother, age 32), living at BS16 1QY. Her national insurance number is QQ 12 34 56 C and her phone is +44 7700 900123.",
   resume: "Resume for Alexnder Cockbrn: graduated from OxfordUniversity and worked at BristolBusinessPark. Please share the report with Synoptx and protect the project LookoutEdg."
 };
@@ -72,6 +72,38 @@ function renderMappings(mappings) {
   }
 }
 
+function renderDetectors() {
+  const grid = $("#detector-grid"); grid.replaceChildren();
+  for (const detector of state.detectors) {
+    const label = document.createElement("label"); label.className = "detector-switch";
+    const copy = document.createElement("span"); copy.className = "detector-copy";
+    const title = document.createElement("b"); title.textContent = detector.label;
+    const key = document.createElement("small"); key.textContent = detector.key.replaceAll("_", " ");
+    copy.append(title, key);
+    const input = document.createElement("input"); input.type = "checkbox"; input.checked = detector.enabled; input.setAttribute("aria-label", `${detector.label} detector`);
+    const track = document.createElement("span"); track.className = "switch-track"; const knob = document.createElement("i"); track.append(knob);
+    input.addEventListener("change", async () => {
+      input.disabled = true;
+      try {
+        await api("/api/detectors", { method: "PUT", body: JSON.stringify({ detectors: { [detector.key]: input.checked } }) });
+        detector.enabled = input.checked; updateToggleAllLabel(); showToast(`${detector.label} ${input.checked ? "enabled" : "disabled"}`);
+      } catch (error) { input.checked = !input.checked; showToast(error.message); }
+      finally { input.disabled = false; }
+    });
+    label.append(copy, input, track); grid.append(label);
+  }
+  updateToggleAllLabel();
+}
+
+function updateToggleAllLabel() {
+  const allEnabled = state.detectors.every(item => item.enabled);
+  $("#toggle-all").textContent = allEnabled ? "Turn all off" : "Turn all on";
+}
+
+async function loadDetectors() {
+  const { detectors } = await api("/api/detectors"); state.detectors = detectors; renderDetectors();
+}
+
 async function loadHistory() {
   try {
     const { scans } = await api("/api/scans");
@@ -137,14 +169,25 @@ $("#copy-output").addEventListener("click", async () => {
   catch { showToast("Clipboard access is unavailable in this browser"); }
 });
 
+$("#toggle-all").addEventListener("click", async () => {
+  const turnOn = state.detectors.some(item => !item.enabled);
+  const updates = Object.fromEntries(state.detectors.map(item => [item.key, turnOn]));
+  const button = $("#toggle-all"); button.disabled = true;
+  try {
+    await api("/api/detectors", { method: "PUT", body: JSON.stringify({ detectors: updates }) });
+    state.detectors.forEach(item => { item.enabled = turnOn; }); renderDetectors(); showToast(`All detectors turned ${turnOn ? "on" : "off"}`);
+  } catch (error) { showToast(error.message); }
+  finally { button.disabled = false; }
+});
+
 $("#term-form").addEventListener("submit", async event => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget));
   try {
     await api("/api/terms", { method: "POST", body: JSON.stringify(data) });
-    event.currentTarget.reset(); $("#term-type").value = "CUSTOM_TERM"; $("#term-sensitivity").value = "CONFIDENTIAL";
+    event.currentTarget.reset(); $("#term-type").value = "PERSON_NAME"; $("#term-sensitivity").value = "CONFIDENTIAL";
     await loadTerms(); showToast("Protected term saved");
   } catch (error) { showToast(error.message); }
 });
 
-Promise.all([loadTerms(), loadHistory()]).catch(error => showToast(error.message));
+Promise.all([loadTerms(), loadHistory(), loadDetectors()]).catch(error => showToast(error.message));

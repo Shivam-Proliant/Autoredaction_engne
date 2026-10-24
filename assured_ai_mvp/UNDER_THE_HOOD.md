@@ -32,7 +32,7 @@ Python's standard library is sufficient. No package installation, Node build, mo
 1. The browser sends the submitted text to `POST /api/scan` on the local server.
 2. `app.py` loads protected terms from SQLite and calls `RedactionEngine.scan()` in `engine.py`.
 3. The scanner finds structured patterns, protected-term matches, and likely secrets; it selects non-overlapping spans and replaces them with placeholders.
-4. The server writes scan metadata, the redacted text, and the per-match token mappings in one SQLite connection, then returns the scan for display.
+4. The server loads the saved detector switches, applies only enabled algorithms, then writes scan metadata, the redacted text, and per-match token mappings in SQLite.
 5. By default, mapping API responses replace every original value with `[REDACTED]`. The separate reveal endpoint returns the stored originals only after the user enables the reveal control.
 
 The app binds to `127.0.0.1:8765`, so it is available only from the same machine by default. HTTP request logging does not include request bodies.
@@ -41,11 +41,13 @@ The app binds to `127.0.0.1:8765`, so it is available only from the same machine
 
 ### Structured patterns
 
-Precompiled regular expressions find email addresses, IPv4 addresses, UK National Insurance numbers, UK mobile numbers, common API key formats, and bearer tokens. IPv4 candidates are checked so each octet is in the `0–255` range. Structured matches take priority when spans overlap.
+Precompiled regular expressions find email addresses, valid IPv4 and IPv6 addresses, UK postcodes, UK National Insurance numbers, US Social Security numbers, UK and North American mobile numbers, common API key formats (OpenAI-style, GitHub, AWS, Google, and Slack), and bearer tokens. Key/value context such as `api_key=...`, `password: ...`, `aws_secret_access_key=...`, and `client_secret=...` catches custom credentials. UK sort codes and Luhn-valid payment card numbers are detected as well. IPv4 octets are validated and IPv6/payment-card candidates use Python's `ipaddress` and Luhn checks. Structured matches take priority when spans overlap.
 
 ### Protected terms, typos, and phonetics
 
-The `protected_terms` table holds a phrase, entity type, and sensitivity. The UI can add and delete entries. Terms are matched over full word spans, so phrases and punctuation-separated values can be handled as a unit. A normalized Damerau–Levenshtein similarity score catches spelling errors and transpositions. A Soundex comparison adds phonetic matching for English-like names. Strong matches are classified as exact, fuzzy, or phonetic. Borderline scores are also redacted and marked **Review** so uncertain text does not pass through as clean output.
+The `protected_terms` table holds a phrase, entity type, and sensitivity. The UI can add and delete entries. Add actual names or phrases (for example, `Marcus Albright`); generic labels like `Name`, `Email`, or `API key` are handled by their detectors and are rejected as protected terms. Terms are matched over full word spans, so phrases and punctuation-separated values can be handled as a unit. A normalized Damerau–Levenshtein similarity score catches spelling errors and transpositions. A Soundex comparison adds phonetic matching for English-like names. Strong matches are classified as exact, fuzzy, or phonetic. Borderline scores are also redacted and marked **Review** so uncertain text does not pass through as clean output.
+
+The scanner also recognizes person names after explicit cues such as `my name is`, `under the name`, `name:`, `I am`, `contact`, `applicant`, and `customer named`. This lets it catch a name such as `Marcus Albright` even if it has not been added to the protected-term list. It is a deterministic context heuristic, not general-purpose name recognition: names with no cue should be added as protected terms, and match review remains important.
 
 Terms with more words are considered first. Once a candidate has claimed a span, overlapping candidates are dropped to avoid duplicate placeholders.
 
@@ -62,6 +64,7 @@ Each accepted match receives an ordered placeholder such as `{{PERSON_NAME_01}}`
 - `protected_terms`: user-managed detection terms. Useful fields: `value`, `entity_type`, and `sensitivity`.
 - `scans`: one row per submitted scan. `redacted_text` is the persisted output and `id` identifies the scan.
 - `redaction_mappings`: one row per placeholder, linked to a scan. `raw_value` contains the original matched text and is sensitive data.
+- `detector_settings`: one enabled/disabled flag per algorithm category. Detector changes persist across restarts.
 
 SQLite creates the database and seeds example terms at first app start. Back up the database only to a location with access controls. To start with a fresh local database, stop the server, move or delete `assured_ai_mvp.sqlite3`, and start the app again. This removes scan history, mappings, and custom terms.
 
@@ -110,15 +113,21 @@ All API routes are served from the same origin as the UI:
 | Method | Route | Purpose |
 | --- | --- | --- |
 | GET | `/api/health` | Local server and engine status |
-| GET | `/api/terms` | List protected terms |
+| GET | `/api/terms` | List custom placeholder rules |
 | POST | `/api/terms` | Add a term (`value`, `entity_type`, `sensitivity`) |
 | DELETE | `/api/terms/{id}` | Delete a protected term |
+| GET | `/api/detectors` | List detector categories and their enabled state |
+| PUT | `/api/detectors` | Update one or more detector switches |
 | POST | `/api/scan` | Scan JSON `{ "text": "..." }` |
 | GET | `/api/scans` | Read the latest 50 saved scans and mappings, with originals masked |
 | GET | `/api/scans/{id}` | Read a saved scan with originals masked |
 | GET | `/api/scans/{id}/reveal` | Return mapping originals for the explicit reveal workflow |
 
-The scan endpoint accepts up to 100,000 characters. Protected terms are limited to 120 characters. Invalid or empty input returns a JSON error with an appropriate HTTP status.
+The scan endpoint accepts up to 100,000 characters. Custom placeholder values are limited to 120 characters. Invalid or empty input returns a JSON error with an appropriate HTTP status.
+
+The default detector categories are name, address, API keys/tokens, bank account and sort code, payment card, password, service name, ethnicity, region/city, email, mobile number, IP address, currency amount, and national identifier. All are enabled by default. The UI's individual switches and **Turn all on/off** control persist through `/api/detectors`. Custom placeholder rules use the actual text or phrase as the protected value and the entity type as the generated placeholder label. For example, value `Marcus Albright` with type `PERSON_NAME` can produce `{{PERSON_NAME_01}}`.
+
+Address detection covers street-number and street-suffix patterns (for example, `42 Elmwood Road, Bristol, BS8 4TR`) and UK postcodes. Bank account identifiers are detected after account-number cues; debit/credit card fragments such as `ending in 4128` are detected after a card cue; full card numbers require a valid Luhn checksum. Currency amounts with common symbols are detected. Ethnicity is matched from a built-in vocabulary after an ethnicity/race label; regions use a built-in UK region/city vocabulary and can also be added as custom placeholders. These are deterministic heuristics, so add organization-specific values as custom rules and review matches.
 
 ## 8. Deployment
 
@@ -161,6 +170,7 @@ Use Task Scheduler or a managed service wrapper to start `python.exe` with `app.
 ## 9. Extending safely
 
 - Add structured detectors as compiled patterns in `PATTERNS` in `engine.py`, including realistic positive and negative examples.
+- Add new category keys to `DETECTOR_LABELS` and `DEFAULT_DETECTORS`, map custom entity types in `ENTITY_DETECTOR`, and gate every algorithm by its category switch.
 - Keep all span offsets relative to the original submitted text. Add overlap behavior deliberately; the current selection keeps the highest-priority, longest non-overlapping candidates.
 - Add classifications to the allowed sensitivity values in both the UI and API validation if a new sensitivity tier is required.
 - If implementing restoration, enforce authorization on the server and do not treat a hidden UI value as access control.

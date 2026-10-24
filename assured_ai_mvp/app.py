@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from engine import RedactionEngine
+from engine import DEFAULT_DETECTORS, DETECTOR_LABELS, GENERIC_LABELS, RedactionEngine
 
 
 ROOT = Path(__file__).resolve().parent
@@ -53,12 +53,26 @@ def connect_db() -> sqlite3.Connection:
             match_method TEXT NOT NULL,
             similarity REAL NOT NULL,
             sensitivity TEXT NOT NULL,
+            detector_key TEXT NOT NULL DEFAULT 'service_name',
             review_required INTEGER NOT NULL DEFAULT 0,
             span_start INTEGER NOT NULL,
             span_end INTEGER NOT NULL,
             UNIQUE(scan_id, placeholder)
         )
     """)
+    mapping_columns = {row[1] for row in conn.execute("PRAGMA table_info(redaction_mappings)")}
+    if "detector_key" not in mapping_columns:
+        conn.execute("ALTER TABLE redaction_mappings ADD COLUMN detector_key TEXT NOT NULL DEFAULT 'service_name'")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS detector_settings (
+            detector_key TEXT PRIMARY KEY,
+            enabled INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    conn.executemany(
+        "INSERT OR IGNORE INTO detector_settings(detector_key, enabled) VALUES (?, ?)",
+        [(key, int(enabled)) for key, enabled in DEFAULT_DETECTORS.items()],
+    )
     seed = [
         ("Priya", "PERSON_NAME", "PII"),
         ("Patel", "PERSON_NAME", "PII"),
@@ -77,6 +91,11 @@ def connect_db() -> sqlite3.Connection:
         "INSERT OR IGNORE INTO protected_terms(value, entity_type, sensitivity) VALUES (?, ?, ?)",
         seed,
     )
+    # Old UI usage sometimes saved a field label like "Name" as a protected value.
+    # Field labels are detected by algorithms; dictionary entries must be actual values.
+    labels = tuple(GENERIC_LABELS)
+    placeholders = ",".join("?" for _ in labels)
+    conn.execute(f"DELETE FROM protected_terms WHERE lower(trim(value)) IN ({placeholders})", labels)
     conn.commit()
     return conn
 
@@ -86,7 +105,7 @@ def fetch_scan(conn: sqlite3.Connection, scan_id: str, reveal: bool = False) -> 
     if not scan:
         return None
     mappings = conn.execute(
-        "SELECT placeholder, raw_value, entity_type, match_method, similarity, sensitivity, review_required, span_start, span_end "
+        "SELECT placeholder, raw_value, entity_type, match_method, similarity, sensitivity, detector_key, review_required, span_start, span_end "
         "FROM redaction_mappings WHERE scan_id = ? ORDER BY span_start, id",
         (scan_id,),
     ).fetchall()
@@ -99,7 +118,8 @@ def fetch_scan(conn: sqlite3.Connection, scan_id: str, reveal: bool = False) -> 
         ],
         "highlights": [
             {"start": row["span_start"], "end": row["span_end"], "placeholder": row["placeholder"],
-             "entity_type": row["entity_type"], "review_required": bool(row["review_required"])}
+             "entity_type": row["entity_type"], "detector": row["detector_key"],
+             "review_required": bool(row["review_required"])}
             for row in mapping_rows
         ],
     }
@@ -141,6 +161,13 @@ class Handler(BaseHTTPRequestHandler):
                     "SELECT id, value, entity_type, sensitivity FROM protected_terms ORDER BY value COLLATE NOCASE"
                 )]
             return self._json(200, {"terms": terms})
+        if route == "/api/detectors":
+            with connect_db() as conn:
+                states = {row["detector_key"]: bool(row["enabled"]) for row in conn.execute("SELECT detector_key, enabled FROM detector_settings")}
+            return self._json(200, {"detectors": [
+                {"key": key, "label": label, "enabled": states.get(key, True)}
+                for key, label in DETECTOR_LABELS.items()
+            ]})
         if route == "/api/scans":
             with connect_db() as conn:
                 rows = conn.execute("SELECT id FROM scans ORDER BY created_at DESC, rowid DESC LIMIT 50").fetchall()
@@ -198,7 +225,8 @@ class Handler(BaseHTTPRequestHandler):
                 "SELECT value, entity_type, sensitivity FROM protected_terms"
             )]
             terms.sort(key=lambda item: len(item["value"]), reverse=True)
-            result = RedactionEngine(terms).scan(text)
+            detector_state = {row["detector_key"]: bool(row["enabled"]) for row in conn.execute("SELECT detector_key, enabled FROM detector_settings")}
+            result = RedactionEngine(terms).scan(text, detector_state)
             scan_id = uuid.uuid4().hex
             conn.execute(
                 "INSERT INTO scans(id, original_length, redacted_text, match_count, review_count, processing_ms) "
@@ -206,11 +234,11 @@ class Handler(BaseHTTPRequestHandler):
                 (scan_id, len(text), result["redacted_text"], len(result["matches"]), result["review_count"], result["processing_ms"]),
             )
             conn.executemany(
-                "INSERT INTO redaction_mappings(scan_id, placeholder, raw_value, entity_type, match_method, similarity, sensitivity, review_required, span_start, span_end) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO redaction_mappings(scan_id, placeholder, raw_value, entity_type, match_method, similarity, sensitivity, detector_key, review_required, span_start, span_end) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [(
                     scan_id, match["placeholder"], match["raw_value"], match["entity_type"],
-                    match["match_method"], match["similarity"], match["sensitivity"],
+                    match["match_method"], match["similarity"], match["sensitivity"], match["detector"],
                     int(match["review_required"]), match["start"], match["end"],
                 ) for match in result["matches"]],
             )
@@ -231,6 +259,8 @@ class Handler(BaseHTTPRequestHandler):
         sensitivity = payload.get("sensitivity", "CONFIDENTIAL")
         if not isinstance(value, str) or not value.strip() or len(value.strip()) > 120:
             return self._json(400, {"error": "Enter a protected term of 1 to 120 characters."})
+        if value.strip().casefold() in GENERIC_LABELS:
+            return self._json(400, {"error": "Add an actual name or phrase (for example, Marcus Albright), not a field label such as Name, Email, or API key. Those categories are scanned automatically."})
         if not isinstance(entity_type, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{1,39}", entity_type):
             return self._json(400, {"error": "Entity type must contain 2–40 letters, numbers, or underscores."})
         if not isinstance(sensitivity, str) or sensitivity not in {"PII", "CONFIDENTIAL", "CRITICAL_SECRET"}:
@@ -261,6 +291,27 @@ class Handler(BaseHTTPRequestHandler):
             cur = conn.execute("DELETE FROM protected_terms WHERE id = ?", (term_id,))
             conn.commit()
         return self._json(200, {"deleted": cur.rowcount == 1})
+
+    def do_PUT(self) -> None:
+        if urlparse(self.path).path != "/api/detectors":
+            return self._json(404, {"error": "Not found."})
+        try:
+            payload = self._body()
+        except ValueError as exc:
+            return self._json(400, {"error": str(exc)})
+        updates = payload.get("detectors")
+        if not isinstance(updates, dict) or not updates:
+            return self._json(400, {"error": "Provide at least one detector setting."})
+        unknown = set(updates) - set(DEFAULT_DETECTORS)
+        if unknown or any(not isinstance(value, bool) for value in updates.values()):
+            return self._json(400, {"error": "Detector settings must use known keys and true/false values."})
+        with connect_db() as conn:
+            conn.executemany(
+                "INSERT INTO detector_settings(detector_key, enabled) VALUES (?, ?) "
+                "ON CONFLICT(detector_key) DO UPDATE SET enabled=excluded.enabled",
+                [(key, int(value)) for key, value in updates.items()],
+            )
+        return self._json(200, {"detectors": updates})
 
 
 def main() -> None:

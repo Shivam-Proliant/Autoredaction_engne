@@ -50,6 +50,11 @@
 
         <div class="examples"><span>Try an example</span><button data-example="incident">Incident report</button><button data-example="credit">Credit review</button><button data-example="resume">Resume excerpt</button></div>
 
+        <section class="detector-panel panel" aria-labelledby="detector-title">
+          <div class="detector-head"><div><div class="section-kicker">ALGORITHM CONTROLS</div><h2 id="detector-title">Detectors</h2><p>Choose which algorithms run on the next scan. Settings are saved in local SQLite.</p></div><button class="toggle-all-button" id="toggle-all" type="button">Turn all off</button></div>
+          <div class="detector-grid" id="detector-grid" aria-live="polite"></div>
+        </section>
+
         <section class="results-section" id="results-section" hidden aria-live="polite">
           <div class="results-heading"><div><div class="section-kicker">02 <span>RESULTS</span></div><h2>Review your scan</h2></div><div class="scan-stats" id="scan-stats"></div></div>
           <div class="review-alert" id="review-alert" hidden><span>!</span><div><b>Some matches need a closer look</b><p>These uncertain matches were redacted and marked for review, so the output remains protected.</p></div></div>
@@ -66,15 +71,15 @@
         </section>
 
         <section class="terms-section panel" id="protected-terms">
-          <div class="terms-head"><div><div class="section-kicker">DETECTION CONFIGURATION</div><h2>Protected terms</h2><p>Names and phrases here are checked for exact matches, typos, and phonetic similarities.</p></div><span class="term-count" id="term-count">0 terms</span></div>
+          <div class="terms-head"><div><div class="section-kicker">CUSTOM PLACEHOLDERS</div><h2>Add a placeholder rule</h2><p>Enter the actual sensitive value or phrase. The selected type becomes its placeholder, for example <code>{{PERSON_NAME_01}}</code>.</p></div><span class="term-count" id="term-count">0 rules</span></div>
           <form id="term-form" class="term-form">
-            <label><span>Term or phrase</span><input id="term-value" name="value" maxlength="120" placeholder="e.g. Contoso Holdings" required></label>
-            <label><span>Entity type</span><input id="term-type" name="entity_type" maxlength="40" value="CUSTOM_TERM" required></label>
+            <label><span>Sensitive value or phrase</span><input id="term-value" name="value" maxlength="120" placeholder="e.g. Contoso Holdings" required></label>
+            <label><span>Placeholder type</span><input id="term-type" name="entity_type" list="placeholder-types" maxlength="40" value="PERSON_NAME" required><datalist id="placeholder-types"><option value="PERSON_NAME"><option value="ADDRESS"><option value="API_KEY"><option value="BANK_ACCOUNT"><option value="PAYMENT_CARD"><option value="PASSWORD"><option value="SERVICE_NAME"><option value="ETHNICITY"><option value="REGION"><option value="CUSTOM_TERM"></datalist></label>
             <label><span>Sensitivity</span><select id="term-sensitivity" name="sensitivity"><option>PII</option><option selected>CONFIDENTIAL</option><option>CRITICAL_SECRET</option></select></label>
-            <button class="add-term-button" type="submit">＋ Add term</button>
+            <button class="add-term-button" type="submit">＋ Add placeholder</button>
           </form>
           <div class="terms-list" id="terms-list"></div>
-          <div class="terms-foot"><span class="status-dot"></span> <span>Changes are saved locally and apply to the next scan.</span></div>
+          <div class="terms-foot"><span class="status-dot"></span> <span>Rules are saved locally and apply to the next scan. Generic labels such as “Name” are not values; use a real name or phrase.</span></div>
         </section>
         <footer class="page-footer"><span>Assured AI Redaction Workbench</span><span>Algorithmic scanning · No model inference</span></footer>
       </section>
