@@ -350,6 +350,50 @@ class SQLiteAssuredVault:
         self.conn.commit()
         return "".join(output_tokens)
 
+    def register_ai_redaction(
+        self,
+        session_id: str,
+        original_text: str,
+        redacted_text: str,
+        extracted_tokens: List[Dict[str, Any]],
+        elapsed_ms: float = 0.0
+    ) -> str:
+        """
+        Stores tokens produced by a Local Small LLM (SLM) directed redaction pass
+        directly into the SQLite token_vault and assurance_audit_log so they can be
+        governed and detokenised by SQLite's native ai_restore(...) RBAC function.
+        """
+        cur = self.conn.cursor()
+        max_sensitivity = "PUBLIC"
+        sensitivity_rank = {"PUBLIC": 0, "PII": 1, "CONFIDENTIAL": 2, "CRITICAL_SECRET": 3}
+
+        for idx, item in enumerate(extracted_tokens):
+            ph = item.get("placeholder", f"{{{{CUSTOM_SLM_{idx+1:02d}}}}}")
+            raw = item.get("raw_value", "")
+            etype = item.get("entity_type", "SLM_EXTRACTED")
+            sens = item.get("sensitivity_level", "CONFIDENTIAL")
+
+            if sensitivity_rank.get(sens, 0) > sensitivity_rank.get(max_sensitivity, 0):
+                max_sensitivity = sens
+
+            cur.execute(
+                """INSERT OR REPLACE INTO token_vault
+                (session_id, placeholder, raw_value, entity_type, match_method, similarity_score, sensitivity_level, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (session_id, ph, raw, etype, "LOCAL_SLM_DIRECTED", 1.0, sens, time.time())
+            )
+
+        recommended_route = "LOCAL_RUST_ENCLAVE" if max_sensitivity == "CRITICAL_SECRET" else "CLOUD_API_SAFE"
+
+        cur.execute(
+            """INSERT INTO assurance_audit_log
+            (session_id, original_length, redacted_count, grey_zone_count, max_sensitivity, recommended_route, processing_ms)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (session_id, len(original_text), len(extracted_tokens), 0, max_sensitivity, recommended_route, round(elapsed_ms, 3))
+        )
+        self.conn.commit()
+        return redacted_text
+
     def restore_text(self, ai_response: str, session_id: str = "default_session", user_role: str = "ADMIN") -> str:
         """
         Core SQLite UDF: Detokenises placeholders back to original credentials/metadata
