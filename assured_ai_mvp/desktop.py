@@ -1,4 +1,4 @@
-"""Native desktop shell for the local Assured AI workbench."""
+"""Native desktop shell for the local PromptVeil workbench."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def main() -> None:
         threading.Thread(target=server.serve_forever, name="redaction-api", daemon=True).start()
         url = f"http://127.0.0.1:{server.server_port}/"
         window = webview.create_window(
-            "Assured AI — Redaction Workbench",
+            "PromptVeil — Redaction Workbench",
             url,
             width=1440,
             height=960,
@@ -50,7 +50,7 @@ def main() -> None:
         root = tk.Tk()
         root.withdraw()
         messagebox.showerror(
-            "Assured AI Workbench",
+            "PromptVeil Workbench",
             f"The desktop app could not start.\n\n{exc}\n\nDetails are saved in the local app data folder.",
         )
     finally:

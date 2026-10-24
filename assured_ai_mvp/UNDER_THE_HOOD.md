@@ -1,4 +1,4 @@
-# Under the Hood: Assured AI Redaction Workbench
+# Under the Hood: PromptVeil Redaction Workbench
 
 This guide explains how to understand, extend, run, and deploy the deterministic redaction MVP. It is written for developers implementing the project in their own environment.
 
@@ -110,7 +110,7 @@ For development, edit `engine.py` for scanning behavior, `app.py` for the API an
 
 The desktop shell wraps the same local API and UI in a native WebView2 window. It chooses an available loopback port at launch, runs the API in the background, and shuts it down when the desktop window closes. In a packaged build, the SQLite vault is stored under `%LOCALAPPDATA%\AssuredAI\RedactionWorkbench`; the source server continues to store it beside `app.py`.
 
-Run `.\build_windows.ps1` from this directory. It creates an isolated `.desktop-build-venv`, installs the desktop packaging dependencies, and creates `dist\AssuredAI-RedactionWorkbench-1.2.0.exe`. The deterministic Tier 1 works without Python on the end user's computer. Desktop-only Tier 2 and Tier 3 discover Qwen2.5-0.5B-Instruct in the standard Hugging Face cache and use the laptop's installed Python, PyTorch, and Transformers in offline mode. Model weights and inference libraries are not bundled into the executable. The Edge WebView2 Runtime is required for the native window.
+Run `.\build_windows.ps1` from this directory. It creates an isolated `.desktop-build-venv`, installs the desktop packaging dependencies, and creates `dist\PromptVeil-RedactionWorkbench-1.2.1.exe`. The deterministic Tier 1 works without Python on the end user's computer. Desktop-only Tier 2 and Tier 3 discover Qwen2.5-0.5B-Instruct in the standard Hugging Face cache and use the laptop's installed Python, PyTorch, and Transformers in offline mode. Model weights and inference libraries are not bundled into the executable. The Edge WebView2 Runtime is required for the native window.
 
 The local Qwen runtime starts only after selecting Tier 2 or Tier 3 and pressing **Run scan**. Its worker receives scan text over a local process pipe, generates candidate spans on CPU, and does not write input text to disk or logs. Candidate spans must exactly match the input, are merged without overlapping deterministic matches, and are marked for human review. The classifier is supplementary and may miss sensitive content; inspect the detected spans and use Tier 1 or Hybrid according to the task. Tier 2 supports text up to 12,000 characters; Tier 1 retains its 100,000-character limit.
 
@@ -130,7 +130,7 @@ All API routes are served from the same origin as the UI:
 | GET | `/api/scans` | Read the latest 50 saved scans and mappings, with originals masked |
 | GET | `/api/scans/{id}` | Read a saved scan with originals masked |
 | GET | `/api/scans/{id}/reveal` | Return mapping originals for the explicit reveal workflow |
-| GET | `/api/compliance-report` | Export saved redacted results and audit metadata without matched originals |
+| GET | `/api/compliance-report` | Export GDPR processing evidence and redacted audit metadata without input text or matched originals |
 
 The scan endpoint accepts up to 100,000 characters. Custom placeholder values are limited to 120 characters. Invalid or empty input returns a JSON error with an appropriate HTTP status.
 
@@ -152,7 +152,7 @@ Use a dedicated operating-system account and a private application directory. Ex
 
 ```ini
 [Unit]
-Description=Assured AI Redaction Workbench
+Description=PromptVeil Redaction Workbench
 After=network.target
 
 [Service]

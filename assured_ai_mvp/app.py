@@ -1,4 +1,4 @@
-"""Local-only HTTP app for the Assured AI Redaction Workbench."""
+"""Local-only HTTP app for the PromptVeil Redaction Workbench."""
 
 from __future__ import annotations
 
@@ -272,7 +272,6 @@ class Handler(BaseHTTPRequestHandler):
                         "id": saved["id"],
                         "created_at": saved["created_at"],
                         "original_length": saved["original_length"],
-                        "redacted_text": saved["redacted_text"],
                         "match_count": saved["match_count"],
                         "review_count": saved["review_count"],
                         "processing_ms": saved["processing_ms"],
@@ -284,10 +283,18 @@ class Handler(BaseHTTPRequestHandler):
                         )} for mapping in saved["mappings"]],
                     })
             report = {
-                "report_title": "Assured AI Redaction Compliance Report",
-                "schema_version": 1,
+                "report_title": "PromptVeil GDPR Processing Evidence Report",
+                "report_type": "GDPR processing evidence; not a certification of legal compliance",
+                "schema_version": 2,
                 "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "storage": "Local SQLite",
+                "gdpr_context": {
+                    "purpose": "Local text scanning and redaction of sensitive information before downstream use.",
+                    "data_minimisation": "Original input text is not retained. Match originals are stored locally in SQLite for mapping, but excluded from this report.",
+                    "security_and_access": "This report contains redacted scan metadata only. Protect the device and its SQLite vault with appropriate access controls.",
+                    "retention": "Scan history and match mappings remain in the local SQLite vault until the user removes the database or implements a retention policy.",
+                    "operator_review": "Review detection output, lawful basis, purpose limitation, retention, access controls, and data-subject rights for your deployment.",
+                },
                 "processing": {
                     "engine": "local algorithmic detectors with optional Qwen classification",
                     "model_inference_used": any(scan["model_name"] for scan in scans),
@@ -298,9 +305,15 @@ class Handler(BaseHTTPRequestHandler):
                     "scan_count": len(scans),
                     "redaction_count": sum(scan["match_count"] for scan in scans),
                     "review_count": sum(scan["review_count"] for scan in scans),
+                    "entity_counts": {},
                 },
                 "scans": scans,
             }
+            entity_counts = report["summary"]["entity_counts"]
+            for scan in scans:
+                for mapping in scan["mappings"]:
+                    entity = mapping["entity_type"]
+                    entity_counts[entity] = entity_counts.get(entity, 0) + 1
             return self._json(200, {"report": report})
         if route == "/api/runtime":
             model_status = LOCAL_QWEN.status() if LOCAL_QWEN else {
@@ -483,7 +496,7 @@ def create_server(port: int = 8765) -> ThreadingHTTPServer:
 def main() -> None:
     connect_db().close()
     server = create_server()
-    print(f"Assured AI Redaction Workbench is running at http://127.0.0.1:{server.server_port}")
+    print(f"PromptVeil Redaction Workbench is running at http://127.0.0.1:{server.server_port}")
     print(f"SQLite database: {DB_PATH}")
     try:
         server.serve_forever()

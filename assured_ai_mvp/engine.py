@@ -110,7 +110,9 @@ PATTERNS = [
     ("SECRET_API_KEY", "CRITICAL_SECRET", "API_KEY", "api_key", re.compile(r"(?<![A-Za-z0-9])(?:sk-(?:proj-|svcacct-|live_|test_|ant-)?[A-Za-z0-9_-]{12,}|pk_(?:live_|test_)?[A-Za-z0-9_-]{12,}|(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,})|AKIA[A-Z0-9]{16}|AIza[0-9A-Za-z_-]{30,}|(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{12,}|xox[baprs]-[A-Za-z0-9-]{16,})(?![A-Za-z0-9])", re.I)),
     ("SECRET_BEARER_TOKEN", "CRITICAL_SECRET", "BEARER_TOKEN", "api_key", re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*", re.I)),
     ("EMAIL", "PII", "EMAIL", "email", re.compile(r"(?<![\w.+-])[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+(?![\w-])")),
-    ("UK_NI_NUMBER", "PII", "NI_NUMBER", "identity", re.compile(r"\b[A-CEGHJ-PR-TW-Z]{2}\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D]\b", re.I)),
+    # Capture the common NI-number shape even with a disallowed prefix (e.g. QQ),
+    # redact it, and mark the invalid prefix for review instead of leaking it.
+    ("UK_NI_NUMBER", "PII", "NI_NUMBER", "identity", re.compile(r"\b[A-Z]{2}\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D]\b", re.I)),
     ("IPV4_ADDR", "CONFIDENTIAL", "IPV4", "ip", re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)")),
     ("IPV6_ADDR", "CONFIDENTIAL", "IPV6", "ip", re.compile(r"(?<![\w:])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f:]{1,4}(?![\w:])")),
     ("MOBILE_NUMBER", "PII", "MOBILE_UK", "mobile", re.compile(r"(?<!\w)(?:\+44[\s().-]?7\d{3}|07\d{3})[\s().-]?\d{3}[\s().-]?\d{3}(?!\w)")),
@@ -167,13 +169,21 @@ class RedactionEngine:
                         continue
                 if entity == "PAYMENT_CARD" and not self._passes_luhn(value):
                     continue
-                if entity == "UK_NI_NUMBER" and value.replace(" ", "").upper()[:2] in {"BG", "GB", "NK", "KN", "TN", "NT", "ZZ"}:
-                    continue
+                review_required = False
+                if entity == "UK_NI_NUMBER":
+                    compact = value.replace(" ", "").upper()
+                    prefix = compact[:2]
+                    invalid_prefix = (
+                        prefix in {"BG", "GB", "NK", "KN", "TN", "NT", "ZZ"}
+                        or prefix[0] in "DFIQUV"
+                        or prefix[1] in "DFIOQUV"
+                    )
+                    review_required = invalid_prefix
                 if entity in {"BANK_ACCOUNT", "ACCOUNT_NUMBER"}:
                     start, end = match.span(1)
                 else:
                     start, end = match.span()
-                candidates.append(self._candidate(start, end, entity, sensitivity, method, 1.0, False, detector))
+                candidates.append(self._candidate(start, end, entity, sensitivity, method, 0.82 if review_required else 1.0, review_required, detector))
 
         self._add_pattern_candidates(candidates, text, ADDRESS_PATTERN, "ADDRESS", "PII", "ADDRESS_CONTEXT", "address", enabled)
         self._add_pattern_candidates(candidates, text, ACCOUNT_CONTEXT, "ACCOUNT_NUMBER", "CONFIDENTIAL", "ACCOUNT_CONTEXT", "bank_account", enabled, group="value")

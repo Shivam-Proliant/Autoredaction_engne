@@ -25,7 +25,7 @@ exe = EXE(
     analysis.binaries,
     analysis.datas,
     [],
-    name="AssuredAI-RedactionWorkbench-1.2.0",
+    name="PromptVeil-RedactionWorkbench-1.2.1",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#eff3e9">
   <meta name="description" content="A local, algorithmic redaction workbench.">
-  <title>Assured AI — Redaction Workbench</title>
+  <title>PromptVeil — Redaction Workbench</title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
 </head>
@@ -13,7 +13,7 @@
   <div class="shell">
     <main class="main" id="workbench">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Assured AI home"><span class="brand-mark" aria-hidden="true">A</span><span>Assured AI</span></a>
+        <a class="brand" href="/" aria-label="PromptVeil home"><span class="brand-mark" aria-hidden="true">P</span><span>PromptVeil</span></a>
         <div class="top-actions"><span class="engine-badge"><span class="status-dot"></span> Local algorithmic engine</span><button class="new-scan" id="new-scan" type="button"><span aria-hidden="true">＋</span> New scan</button></div>
       </header>
 
@@ -47,8 +47,8 @@
         </section>
 
         <section class="compliance-panel panel" aria-labelledby="compliance-title">
-          <div><div class="section-kicker">LOCAL AUDIT EXPORT</div><h2 id="compliance-title">Compliance report</h2><p>Download recorded redacted scans with detector, method, sensitivity, review, and timing details. Original text and matched values are excluded.</p></div>
-          <button class="add-term-button" id="export-report" type="button">↓ Download report</button>
+          <div><div class="section-kicker">GDPR PROCESSING EVIDENCE</div><h2 id="compliance-title">GDPR report</h2><p>Download a printable report of recorded scans, redaction counts, detector methods, review flags, and local data-handling notes. It excludes original text and matched values.</p></div>
+          <button class="add-term-button" id="export-report" type="button">↓ Download GDPR report</button>
         </section>
 
         <section class="results-section" id="results-section" hidden aria-live="polite">
@@ -77,7 +77,7 @@
           <div class="terms-list" id="terms-list"></div>
           <div class="terms-foot"><span class="status-dot"></span> <span>Rules are saved locally and apply to the next scan. Generic labels such as “Name” are not values; use a real name or phrase.</span></div>
         </section>
-        <footer class="page-footer"><span>Assured AI Redaction Workbench</span><span id="processing-mode">Local processing · Tier 1 algorithmic</span></footer>
+        <footer class="page-footer"><span>PromptVeil Redaction Workbench</span><span id="processing-mode">Local processing · Tier 1 algorithmic</span></footer>
       </section>
     </main>
   </div>

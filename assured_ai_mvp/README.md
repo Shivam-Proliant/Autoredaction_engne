@@ -1,4 +1,4 @@
-# Assured AI Redaction Workbench MVP
+# PromptVeil Redaction Workbench
 
 A local-only redaction workbench with a deterministic scanning engine and SQLite persistence. The browser app uses algorithms only. The packaged desktop app can additionally use the Qwen2.5-0.5B-Instruct model cached on this laptop, fully offline.
 
@@ -24,7 +24,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\build_windows.ps1
 ```
 
-The executable is written to `dist\AssuredAI-RedactionWorkbench-1.2.0.exe`. Tier 1 works without a Python install. Tiers 2 and 3 use the locally cached Qwen2.5-0.5B-Instruct model through an installed Python runtime with PyTorch and Transformers; they stay disabled if the model or runtime is missing. Model inference runs offline on CPU and only in this desktop app. The SQLite vault is saved under `%LOCALAPPDATA%\AssuredAI\RedactionWorkbench`. Building requires Python 3.10+ and network access to install packaging tools. The Microsoft Edge WebView2 Runtime must be present.
+The executable is written to `dist\PromptVeil-RedactionWorkbench-1.2.1.exe`. Tier 1 works without a Python install. Tiers 2 and 3 use the locally cached Qwen2.5-0.5B-Instruct model through an installed Python runtime with PyTorch and Transformers; they stay disabled if the model or runtime is missing. Model inference runs offline on CPU and only in this desktop app. The SQLite vault is saved under `%LOCALAPPDATA%\AssuredAI\RedactionWorkbench`. Building requires Python 3.10+ and network access to install packaging tools. The Microsoft Edge WebView2 Runtime must be present.
 
 ## What it detects
 
@@ -43,6 +43,6 @@ The browser workbench and Tier 1 scan algorithmically when **Run scan** is selec
 - `GET /api/terms`, `POST /api/terms`, `DELETE /api/terms/{id}`
 - `POST /api/scan` with JSON `{ "text": "..." }`
 - `GET /api/scans`, `GET /api/scans/{id}`, `GET /api/scans/{id}/reveal`
-- `GET /api/compliance-report` — recorded redacted scans and audit metadata, without matched originals
+- `GET /api/compliance-report` — GDPR processing evidence and redacted audit metadata, without original text or matched values
 
 The server binds to `127.0.0.1` only. Scan requests and input text are not written to application logs.
