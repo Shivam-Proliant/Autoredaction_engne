@@ -5,12 +5,43 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 import os
+from pathlib import Path
 from tkinter import messagebox
 import traceback
 
 os.environ["ASSURED_DESKTOP_APP"] = "1"
 
 from app import LOCAL_QWEN, connect_db, create_server
+
+
+class DesktopApi:
+    """Desktop-only native file picker for explicit report exports."""
+
+    def __init__(self) -> None:
+        self.window = None
+
+    def save_compliance_report(self, csv_text: str, suggested_name: str) -> dict:
+        if not isinstance(csv_text, str) or len(csv_text) > 10_000_000:
+            return {"saved": False, "error": "The report content is invalid or too large."}
+        if not isinstance(suggested_name, str) or not suggested_name.startswith("promptveil-gdpr-report-"):
+            suggested_name = "promptveil-gdpr-report.csv"
+        suggested_name = Path(suggested_name).name
+        if not suggested_name.lower().endswith(".csv"):
+            suggested_name += ".csv"
+        import webview
+
+        selected = self.window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            save_filename=suggested_name,
+            file_types=("CSV files (*.csv)",),
+        )
+        if not selected:
+            return {"saved": False, "cancelled": True}
+        destination = Path(selected[0])
+        if destination.suffix.lower() != ".csv":
+            destination = destination.with_suffix(".csv")
+        destination.write_text(csv_text, encoding="utf-8-sig", newline="")
+        return {"saved": True, "path": str(destination)}
 
 
 def main() -> None:
@@ -28,6 +59,7 @@ def main() -> None:
         server = create_server(0)
         threading.Thread(target=server.serve_forever, name="redaction-api", daemon=True).start()
         url = f"http://127.0.0.1:{server.server_port}/"
+        desktop_api = DesktopApi()
         window = webview.create_window(
             "PromptVeil — Redaction Workbench",
             url,
@@ -35,7 +67,9 @@ def main() -> None:
             height=960,
             min_size=(900, 680),
             text_select=True,
+            js_api=desktop_api,
         )
+        desktop_api.window = window
 
         window.events.closed += stop_server
         webview.start(gui="edgechromium", debug=False)

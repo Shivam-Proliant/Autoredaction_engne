@@ -16,4 +16,4 @@ try {
     Pop-Location
 }
 
-Write-Host "Desktop app created at: $(Join-Path $Project 'dist\PromptVeil-RedactionWorkbench-1.2.1.exe')"
+Write-Host "Desktop app created at: $(Join-Path $Project 'dist\PromptVeil-RedactionWorkbench-1.2.2.exe')"

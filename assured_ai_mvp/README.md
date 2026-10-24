@@ -24,7 +24,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\build_windows.ps1
 ```
 
-The executable is written to `dist\PromptVeil-RedactionWorkbench-1.2.1.exe`. Tier 1 works without a Python install. Tiers 2 and 3 use the locally cached Qwen2.5-0.5B-Instruct model through an installed Python runtime with PyTorch and Transformers; they stay disabled if the model or runtime is missing. Model inference runs offline on CPU and only in this desktop app. The SQLite vault is saved under `%LOCALAPPDATA%\AssuredAI\RedactionWorkbench`. Building requires Python 3.10+ and network access to install packaging tools. The Microsoft Edge WebView2 Runtime must be present.
+The executable is written to `dist\PromptVeil-RedactionWorkbench-1.2.2.exe`. Tier 1 works without a Python install. Tiers 2 and 3 use the locally cached Qwen2.5-0.5B-Instruct model through an installed Python runtime with PyTorch and Transformers; they stay disabled if the model or runtime is missing. Model inference runs offline on CPU and only in this desktop app. The SQLite vault is saved under `%LOCALAPPDATA%\AssuredAI\RedactionWorkbench`. Building requires Python 3.10+ and network access to install packaging tools. The Microsoft Edge WebView2 Runtime must be present.
 
 ## What it detects
 
