@@ -38,11 +38,11 @@
         </section>
 
         <section class="tiers-panel panel" aria-labelledby="tiers-title">
-          <div class="detector-head"><div><div class="section-kicker">PROCESSING TIERS</div><h2 id="tiers-title">Choose an engine tier</h2><p>Only Tier 1 is available and runs real scans. Other tiers are placeholders and cannot process text.</p></div></div>
+          <div class="detector-head"><div><div class="section-kicker">PROCESSING TIERS</div><h2 id="tiers-title">Choose an engine tier</h2><p id="tier-description">Tier 1 runs here. Local Qwen inference is enabled only in the desktop app and stays on this laptop.</p></div></div>
           <div class="tier-grid">
-            <div class="tier-card tier-active" aria-current="true"><span class="tier-label">TIER 1 · AVAILABLE</span><b>Algorithmic</b><small>Deterministic local detectors</small></div>
-            <button class="tier-card" type="button" disabled aria-label="Tier 2 Local LLM or classifier, coming soon"><span class="tier-label">TIER 2 · COMING SOON</span><b>Local LLM or classifier</b><small>Unavailable · no inference runs</small></button>
-            <button class="tier-card" type="button" disabled aria-label="Tier 3 Hybrid, coming soon"><span class="tier-label">TIER 3 · COMING SOON</span><b>Hybrid</b><small>Unavailable · no inference runs</small></button>
+            <button class="tier-card tier-active" id="tier-algorithmic" data-tier="algorithmic" type="button" aria-pressed="true"><span class="tier-label">TIER 1 · AVAILABLE</span><b>Algorithmic</b><small>Deterministic local detectors</small></button>
+            <button class="tier-card" id="tier-local-llm" data-tier="local_llm" type="button" disabled aria-pressed="false"><span class="tier-label">TIER 2 · DESKTOP ONLY</span><b>Qwen local classifier</b><small>Searching local Qwen model…</small></button>
+            <button class="tier-card" id="tier-hybrid" data-tier="hybrid" type="button" disabled aria-pressed="false"><span class="tier-label">TIER 3 · DESKTOP ONLY</span><b>Hybrid</b><small>Rules plus local Qwen</small></button>
           </div>
         </section>
 
@@ -77,7 +77,7 @@
           <div class="terms-list" id="terms-list"></div>
           <div class="terms-foot"><span class="status-dot"></span> <span>Rules are saved locally and apply to the next scan. Generic labels such as “Name” are not values; use a real name or phrase.</span></div>
         </section>
-        <footer class="page-footer"><span>Assured AI Redaction Workbench</span><span>Algorithmic scanning · No model inference</span></footer>
+        <footer class="page-footer"><span>Assured AI Redaction Workbench</span><span id="processing-mode">Local processing · Tier 1 algorithmic</span></footer>
       </section>
     </main>
   </div>

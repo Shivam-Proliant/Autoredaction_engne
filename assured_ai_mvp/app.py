@@ -8,6 +8,7 @@ import os
 import re
 import sqlite3
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,6 +26,13 @@ else:
     DATA_ROOT = ROOT
 DB_PATH = DATA_ROOT / "assured_ai_mvp.sqlite3"
 STATIC = ROOT / "static"
+DESKTOP_APP = os.environ.get("ASSURED_DESKTOP_APP") == "1"
+if DESKTOP_APP:
+    from local_qwen import LocalQwenRuntime
+
+    LOCAL_QWEN = LocalQwenRuntime(ROOT / "local_qwen_worker.py", DATA_ROOT)
+else:
+    LOCAL_QWEN = None
 
 
 def connect_db() -> sqlite3.Connection:
@@ -48,9 +56,16 @@ def connect_db() -> sqlite3.Connection:
             redacted_text TEXT NOT NULL,
             match_count INTEGER NOT NULL,
             review_count INTEGER NOT NULL,
-            processing_ms REAL NOT NULL
+            processing_ms REAL NOT NULL,
+            tier TEXT NOT NULL DEFAULT 'algorithmic',
+            model_name TEXT NOT NULL DEFAULT ''
         )
     """)
+    scan_columns = {row[1] for row in conn.execute("PRAGMA table_info(scans)")}
+    if "tier" not in scan_columns:
+        conn.execute("ALTER TABLE scans ADD COLUMN tier TEXT NOT NULL DEFAULT 'algorithmic'")
+    if "model_name" not in scan_columns:
+        conn.execute("ALTER TABLE scans ADD COLUMN model_name TEXT NOT NULL DEFAULT ''")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS redaction_mappings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,6 +148,72 @@ def fetch_scan(conn: sqlite3.Connection, scan_id: str, reveal: bool = False) -> 
     }
 
 
+QWEN_ENTITY_MAP = {
+    "PERSON_NAME": ("PERSON_NAME", "name", "PII"), "NAME": ("PERSON_NAME", "name", "PII"),
+    "ADDRESS": ("ADDRESS", "address", "PII"), "LOCATION": ("ADDRESS", "address", "PII"),
+    "EMAIL": ("EMAIL", "email", "PII"), "EMAIL_ADDRESS": ("EMAIL", "email", "PII"),
+    "MOBILE": ("MOBILE_NUMBER", "mobile", "PII"), "MOBILE_NUMBER": ("MOBILE_NUMBER", "mobile", "PII"),
+    "PHONE": ("MOBILE_NUMBER", "mobile", "PII"), "PHONE_NUMBER": ("MOBILE_NUMBER", "mobile", "PII"),
+    "IP": ("IP_ADDRESS", "ip", "PII"), "IP_ADDRESS": ("IP_ADDRESS", "ip", "PII"),
+    "ACCOUNT_NUMBER": ("ACCOUNT_NUMBER", "bank_account", "CONFIDENTIAL"), "BANK_ACCOUNT": ("BANK_ACCOUNT", "bank_account", "CONFIDENTIAL"),
+    "PAYMENT_CARD": ("PAYMENT_CARD", "payment_card", "CRITICAL_SECRET"), "CREDIT_CARD": ("CREDIT_CARD", "payment_card", "CRITICAL_SECRET"),
+    "DEBIT_CARD": ("DEBIT_CARD", "payment_card", "CRITICAL_SECRET"),
+    "API_KEY": ("SECRET_API_KEY", "api_key", "CRITICAL_SECRET"), "SECRET_API_KEY": ("SECRET_API_KEY", "api_key", "CRITICAL_SECRET"),
+    "PASSWORD": ("PASSWORD", "password", "CRITICAL_SECRET"),
+    "ETHNICITY": ("ETHNICITY", "ethnicity", "PII"), "REGION": ("REGION", "region", "PII"),
+    "SERVICE_NAME": ("SERVICE_NAME", "service_name", "CONFIDENTIAL"),
+    "FINANCIAL_AMOUNT": ("FINANCIAL_AMOUNT", "amount", "CONFIDENTIAL"), "AMOUNT": ("FINANCIAL_AMOUNT", "amount", "CONFIDENTIAL"),
+}
+
+
+def merge_qwen_matches(text: str, base_result: dict, entities: list[dict], enabled: dict[str, bool]) -> dict:
+    matches = list(base_result["matches"])
+    for entity in entities:
+        if not isinstance(entity, dict):
+            continue
+        value = entity.get("value", entity.get("text"))
+        if (not isinstance(value, str) or value not in text) and isinstance(entity.get("entity"), str):
+            value = entity["entity"]
+        entity_key = re.sub(r"[^A-Z0-9]+", "_", str(entity.get("type", entity.get("entity_type", ""))).upper()).strip("_")
+        spec = QWEN_ENTITY_MAP.get(entity_key)
+        if not isinstance(value, str) or not spec:
+            continue
+        value = value.strip()
+        if len(value) < 2 or len(value) > 200 or value.casefold() in GENERIC_LABELS:
+            continue
+        entity_type, detector, sensitivity = spec
+        if not enabled.get(detector, True):
+            continue
+        search_from = 0
+        while True:
+            start = text.find(value, search_from)
+            if start < 0:
+                break
+            end = start + len(value)
+            search_from = end
+            if any(start < found["end"] and end > found["start"] for found in matches):
+                continue
+            matches.append({
+                "start": start, "end": end, "entity_type": entity_type,
+                "sensitivity": sensitivity, "match_method": "QWEN_LOCAL_CLASSIFIER",
+                "similarity": 0.7, "review_required": True, "detector": detector,
+            })
+
+    matches.sort(key=lambda item: item["start"])
+    for index, item in enumerate(matches, 1):
+        item["placeholder"] = "{{" + re.sub(r"[^A-Z0-9]+", "_", item["entity_type"].upper()).strip("_") + f"_{index:02d}" + "}}"
+        item["raw_value"] = text[item["start"]:item["end"]]
+    pieces, cursor = [], 0
+    for item in matches:
+        pieces.extend((text[cursor:item["start"]], item["placeholder"]))
+        cursor = item["end"]
+    pieces.append(text[cursor:])
+    base_result["redacted_text"] = "".join(pieces)
+    base_result["matches"] = matches
+    base_result["review_count"] = sum(bool(item["review_required"]) for item in matches)
+    return base_result
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "AssuredRedactionMVP/1.0"
 
@@ -195,6 +276,8 @@ class Handler(BaseHTTPRequestHandler):
                         "match_count": saved["match_count"],
                         "review_count": saved["review_count"],
                         "processing_ms": saved["processing_ms"],
+                        "tier": saved["tier"],
+                        "model_name": saved["model_name"] or None,
                         "mappings": [{key: mapping[key] for key in (
                             "placeholder", "entity_type", "match_method", "similarity",
                             "sensitivity", "detector_key", "review_required", "span_start", "span_end",
@@ -205,7 +288,11 @@ class Handler(BaseHTTPRequestHandler):
                 "schema_version": 1,
                 "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "storage": "Local SQLite",
-                "processing": {"engine": "deterministic algorithmic scanning", "model_inference_used": False},
+                "processing": {
+                    "engine": "local algorithmic detectors with optional Qwen classification",
+                    "model_inference_used": any(scan["model_name"] for scan in scans),
+                    "models_used": sorted({scan["model_name"] for scan in scans if scan["model_name"]}),
+                },
                 "privacy": {"original_input_stored": False, "matched_original_values_included": False},
                 "summary": {
                     "scan_count": len(scans),
@@ -215,6 +302,18 @@ class Handler(BaseHTTPRequestHandler):
                 "scans": scans,
             }
             return self._json(200, {"report": report})
+        if route == "/api/runtime":
+            model_status = LOCAL_QWEN.status() if LOCAL_QWEN else {
+                "available": False, "state": "desktop_only", "model": None,
+                "message": "Local model inference is available only in the packaged desktop app.",
+                "device": None,
+            }
+            return self._json(200, {
+                "desktop_app": DESKTOP_APP,
+                "local_model": model_status,
+                "tiers": {"algorithmic": True, "local_llm": bool(DESKTOP_APP and model_status["available"]),
+                          "hybrid": bool(DESKTOP_APP and model_status["available"])},
+            })
         if route.startswith("/api/scans/"):
             parts = route.strip("/").split("/")
             if len(parts) not in (3, 4):
@@ -257,10 +356,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _scan(self, payload: dict) -> None:
         text = payload.get("text")
+        tier = payload.get("tier", "algorithmic")
+        if not isinstance(tier, str) or tier not in {"algorithmic", "local_llm", "hybrid"}:
+            return self._json(400, {"error": "Choose a supported processing tier."})
+        if tier != "algorithmic" and not DESKTOP_APP:
+            return self._json(403, {"error": "Local Qwen inference is available only in the packaged desktop application."})
         if not isinstance(text, str) or not text.strip():
             return self._json(400, {"error": "Enter text before running a scan."})
         if len(text) > 100_000:
             return self._json(400, {"error": "Text must be 100,000 characters or fewer."})
+        started = time.perf_counter()
         conn = connect_db()
         try:
             terms = [dict(row) for row in conn.execute(
@@ -268,12 +373,27 @@ class Handler(BaseHTTPRequestHandler):
             )]
             terms.sort(key=lambda item: len(item["value"]), reverse=True)
             detector_state = {row["detector_key"]: bool(row["enabled"]) for row in conn.execute("SELECT detector_key, enabled FROM detector_settings")}
-            result = RedactionEngine(terms).scan(text, detector_state)
+            model_name = ""
+            if tier == "local_llm":
+                disabled_detectors = {key: False for key in DEFAULT_DETECTORS}
+                result = RedactionEngine([]).scan(text, disabled_detectors)
+            else:
+                result = RedactionEngine(terms).scan(text, detector_state)
+            if tier in {"local_llm", "hybrid"}:
+                try:
+                    qwen_entities = LOCAL_QWEN.classify(text)
+                except ValueError as exc:
+                    return self._json(400, {"error": str(exc)})
+                except RuntimeError as exc:
+                    return self._json(503, {"error": str(exc)})
+                result = merge_qwen_matches(text, result, qwen_entities, detector_state)
+                model_name = "Qwen2.5-0.5B-Instruct"
+            result["processing_ms"] = round((time.perf_counter() - started) * 1000, 3)
             scan_id = uuid.uuid4().hex
             conn.execute(
-                "INSERT INTO scans(id, original_length, redacted_text, match_count, review_count, processing_ms) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (scan_id, len(text), result["redacted_text"], len(result["matches"]), result["review_count"], result["processing_ms"]),
+                "INSERT INTO scans(id, original_length, redacted_text, match_count, review_count, processing_ms, tier, model_name) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (scan_id, len(text), result["redacted_text"], len(result["matches"]), result["review_count"], result["processing_ms"], tier, model_name),
             )
             conn.executemany(
                 "INSERT INTO redaction_mappings(scan_id, placeholder, raw_value, entity_type, match_method, similarity, sensitivity, detector_key, review_required, span_start, span_end) "

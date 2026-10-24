@@ -1,6 +1,6 @@
 # Assured AI Redaction Workbench MVP
 
-A local-only redaction workbench with a dependency-free Python backend, deterministic algorithms, and SQLite persistence. The UI is served from this app; no cloud model or local LLM is involved.
+A local-only redaction workbench with a deterministic scanning engine and SQLite persistence. The browser app uses algorithms only. The packaged desktop app can additionally use the Qwen2.5-0.5B-Instruct model cached on this laptop, fully offline.
 
 See [UNDER_THE_HOOD.md](UNDER_THE_HOOD.md) for architecture, detection details, local implementation guidance, and deployment instructions.
 
@@ -24,7 +24,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\build_windows.ps1
 ```
 
-The executable is written to `dist\AssuredAI-RedactionWorkbench-1.1.0.exe`. It runs the same local algorithmic engine in a native window and saves its SQLite vault under `%LOCALAPPDATA%\AssuredAI\RedactionWorkbench`. Users can run the executable without installing Python. Building requires Python 3.10+ and network access to install the packaging tools. The Microsoft Edge WebView2 Runtime must be present (current Microsoft Edge installations include it).
+The executable is written to `dist\AssuredAI-RedactionWorkbench-1.2.0.exe`. Tier 1 works without a Python install. Tiers 2 and 3 use the locally cached Qwen2.5-0.5B-Instruct model through an installed Python runtime with PyTorch and Transformers; they stay disabled if the model or runtime is missing. Model inference runs offline on CPU and only in this desktop app. The SQLite vault is saved under `%LOCALAPPDATA%\AssuredAI\RedactionWorkbench`. Building requires Python 3.10+ and network access to install packaging tools. The Microsoft Edge WebView2 Runtime must be present.
 
 ## What it detects
 
@@ -35,7 +35,7 @@ The executable is written to `dist\AssuredAI-RedactionWorkbench-1.1.0.exe`. It r
 
 Detectors can be switched individually or all together, and settings persist across restarts. Custom placeholder rules can be added or removed in the UI: enter the actual protected value and select its placeholder type. Scan results store the redacted text and token mappings in SQLite. Original matched values are masked in the UI until **Reveal originals** is enabled. The original full input is not stored.
 
-The Local LLM button is intentionally disabled. Scanning is algorithmic and runs only when **Run scan** is selected.
+The browser workbench and Tier 1 scan algorithmically when **Run scan** is selected. Qwen inference is limited to the packaged desktop app; Tier 2 model suggestions are marked for review and Tier 3 combines model suggestions with algorithmic detections.
 
 ## Local API
 

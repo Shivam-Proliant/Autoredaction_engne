@@ -1,5 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { scan: null, terms: [], detectors: [], toastTimer: null };
+const state = { scan: null, terms: [], detectors: [], tier: "algorithmic", toastTimer: null };
 const examples = {
   incident: "Hi, I was double-charged on my electricity bill. My account is under the name Marcus Albright. Email: marcus.albright@example.com. Mobile: +44 7700 900123. API key: sk-proj-89fH2kL9pQ3mN7vX1zR4. Server IP: 192.168.1.200.",
   credit: "Review the mortgage application for Priya Patel (single mother, age 32), living at BS16 1QY. Her national insurance number is QQ 12 34 56 C and her phone is +44 7700 900123.",
@@ -45,7 +45,9 @@ function renderScan(scan, originalText, historical = false) {
     renderHighlight(scan, originalText);
   }
   $("#redacted-output").textContent = scan.redacted_text;
-  $("#scan-stats").innerHTML = `<span class="stat-pill"><strong>${scan.match_count}</strong> redactions</span><span class="stat-pill"><strong>${scan.review_count}</strong> review flags</span><span class="stat-pill"><strong>${Number(scan.processing_ms).toFixed(2)} ms</strong></span>`;
+  const tierLabel = scan.tier === "local_llm" ? "Tier 2 · Local Qwen" : scan.tier === "hybrid" ? "Tier 3 · Hybrid" : "Tier 1 · Algorithmic";
+  const modelStat = scan.model_name ? `<span class="stat-pill">${escapeText(scan.model_name)} · CPU</span>` : "";
+  $("#scan-stats").innerHTML = `<span class="stat-pill">${tierLabel}</span><span class="stat-pill"><strong>${scan.match_count}</strong> redactions</span><span class="stat-pill"><strong>${scan.review_count}</strong> review flags</span><span class="stat-pill"><strong>${Number(scan.processing_ms).toFixed(2)} ms</strong></span>${modelStat}`;
   $("#review-alert").hidden = !scan.review_count;
   $("#scan-time").textContent = new Date(`${scan.created_at.replace(" ", "T")}Z`).toLocaleString();
   $("#reveal-values").checked = false;
@@ -103,6 +105,36 @@ async function loadDetectors() {
   const { detectors } = await api("/api/detectors"); state.detectors = detectors; renderDetectors();
 }
 
+function selectTier(tier) {
+  state.tier = tier;
+  document.querySelectorAll("[data-tier]").forEach(button => {
+    const selected = button.dataset.tier === tier;
+    button.classList.toggle("tier-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
+async function loadRuntime() {
+  try {
+    const runtime = await api("/api/runtime");
+    const llmButton = $("#tier-local-llm"), hybridButton = $("#tier-hybrid");
+    const available = Boolean(runtime.desktop_app && runtime.local_model.available);
+    llmButton.disabled = !available; hybridButton.disabled = !available;
+    if (available) {
+      llmButton.querySelector(".tier-label").textContent = "TIER 2 · LOCAL QWEN READY";
+      llmButton.querySelector("small").textContent = "Qwen 0.5B · up to 12k chars · CPU · offline";
+      hybridButton.querySelector(".tier-label").textContent = "TIER 3 · LOCAL HYBRID READY";
+      hybridButton.querySelector("small").textContent = "Detectors plus Qwen · CPU · offline";
+      $("#tier-description").textContent = "Qwen2.5-0.5B-Instruct was found on this laptop. Local tiers run offline in this desktop app; model detections are marked for review.";
+      $("#processing-mode").textContent = "Local Qwen available · CPU · offline · desktop only";
+    } else {
+      const message = runtime.desktop_app ? runtime.local_model.message : "Available only in the standalone desktop app.";
+      llmButton.querySelector("small").textContent = message;
+      hybridButton.querySelector("small").textContent = message;
+    }
+  } catch { /* Older browser-only servers keep the model tiers unavailable. */ }
+}
+
 async function loadTerms() {
   const { terms } = await api("/api/terms"); state.terms = terms;
   $("#term-count").textContent = `${terms.length} term${terms.length === 1 ? "" : "s"}`;
@@ -117,6 +149,7 @@ async function loadTerms() {
   }
 }
 
+document.querySelectorAll("[data-tier]").forEach(button => button.addEventListener("click", () => selectTier(button.dataset.tier)));
 $("#source-text").addEventListener("input", event => { $("#char-count").textContent = `${event.target.value.length.toLocaleString()} / 100,000 characters`; });
 $("#new-scan").addEventListener("click", () => { $("#source-text").value = ""; $("#source-text").dispatchEvent(new Event("input")); $("#source-text").focus(); $("#results-section").hidden = true; });
 document.querySelectorAll("[data-example]").forEach(button => button.addEventListener("click", () => { $("#source-text").value = examples[button.dataset.example]; $("#source-text").dispatchEvent(new Event("input")); $("#source-text").focus(); }));
@@ -127,7 +160,7 @@ $("#run-scan").addEventListener("click", async () => {
   if (!text.trim()) { $("#scan-error").textContent = "Enter text before running a scan."; $("#scan-error").hidden = false; $("#source-text").focus(); return; }
   const button = $("#run-scan"); button.disabled = true; button.innerHTML = "Scanning…";
   try {
-    const { scan } = await api("/api/scan", { method: "POST", body: JSON.stringify({ text }) });
+    const { scan } = await api("/api/scan", { method: "POST", body: JSON.stringify({ text, tier: state.tier }) });
     renderScan(scan, text); showToast(`${scan.match_count} redaction${scan.match_count === 1 ? "" : "s"} found`);
   } catch (error) { $("#scan-error").textContent = error.message; $("#scan-error").hidden = false; }
   finally { button.disabled = false; button.innerHTML = "<span>⌕</span> Run scan"; }
@@ -186,4 +219,4 @@ $("#term-form").addEventListener("submit", async event => {
   } catch (error) { showToast(error.message); }
 });
 
-Promise.all([loadTerms(), loadDetectors()]).catch(error => showToast(error.message));
+Promise.all([loadTerms(), loadDetectors(), loadRuntime()]).catch(error => showToast(error.message));

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
+import os
 from tkinter import messagebox
 import traceback
 
-from app import connect_db, create_server
+os.environ["ASSURED_DESKTOP_APP"] = "1"
+
+from app import LOCAL_QWEN, connect_db, create_server
 
 
 def main() -> None:
@@ -16,6 +19,8 @@ def main() -> None:
     def stop_server() -> None:
         if server is not None:
             threading.Thread(target=server.shutdown, name="redaction-api-shutdown", daemon=True).start()
+        if LOCAL_QWEN:
+            LOCAL_QWEN.close()
 
     try:
         import webview
