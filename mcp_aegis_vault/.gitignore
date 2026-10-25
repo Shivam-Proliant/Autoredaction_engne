@@ -1,0 +1,9 @@
+venv/
+.venv314/
+.runtime_packages/
+__pycache__/
+*.sqlite3
+runtime-logs/
+.aegis-processes.json
+.codex-build/
+.codex-finalizer/
